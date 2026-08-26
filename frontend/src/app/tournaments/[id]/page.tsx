@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 
@@ -23,6 +23,7 @@ type Tournament = {
   status: string;
   description?: string;
   rules?: string[];
+
   paymentQr?: string;
   qrCode?: string;
   upiQr?: string;
@@ -32,9 +33,11 @@ type Tournament = {
 type User = {
   id?: string;
   _id?: string;
+
   username?: string;
   fullName?: string;
   name?: string;
+
   email?: string;
   mobile?: string;
 
@@ -69,35 +72,246 @@ type PlayerValidation = {
 };
 
 // ======================================================
-// API
+// PRODUCTION API CONFIGURATION
+// ======================================================
+//
+// IMPORTANT:
+//
+// Put your DEPLOYED EXPRESS BACKEND URL here.
+//
+// Example:
+//
+// const PRODUCTION_API_URL =
+//   "https://top1squad-backend.onrender.com";
+//
+// Do NOT add /api at the end.
+//
+// Correct:
+// https://your-backend.com
+//
+// Wrong:
+// https://your-backend.com/api
+//
 // ======================================================
 
-const RAW_API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001";
+const PRODUCTION_API_URL =
+  "https://YOUR-BACKEND-DOMAIN.com";
 
-const API_URL = RAW_API_URL
-  .replace(/\/+$/, "")
-  .replace(/\/api$/, "");
+// ======================================================
+// API URL
+// ======================================================
+//
+// Priority:
+//
+// 1. NEXT_PUBLIC_API_URL
+// 2. Production backend URL above
+// 3. localhost only during local development
+//
+// ======================================================
+
+function getApiUrl(): string {
+  const environmentUrl =
+    String(
+      process.env.NEXT_PUBLIC_API_URL || ""
+    ).trim();
+
+  const productionUrl =
+    String(
+      PRODUCTION_API_URL || ""
+    ).trim();
+
+  const isBrowser =
+    typeof window !== "undefined";
+
+  const isProduction =
+    process.env.NODE_ENV === "production";
+
+  let selectedUrl = "";
+
+  if (environmentUrl) {
+    selectedUrl = environmentUrl;
+  } else if (
+    isProduction &&
+    productionUrl &&
+    !productionUrl.includes(
+      "YOUR-BACKEND-DOMAIN"
+    )
+  ) {
+    selectedUrl = productionUrl;
+  } else if (!isProduction) {
+    selectedUrl =
+      "http://localhost:5001";
+  } else {
+    throw new Error(
+      "Production backend URL is not configured."
+    );
+  }
+
+  selectedUrl =
+    selectedUrl
+      .replace(/\/+$/, "")
+      .replace(/\/api$/, "");
+
+  // Prevent accidental frontend-relative API requests.
+  if (
+    isBrowser &&
+    isProduction &&
+    !selectedUrl.startsWith("http://") &&
+    !selectedUrl.startsWith("https://")
+  ) {
+    throw new Error(
+      "Invalid production backend URL."
+    );
+  }
+
+  return selectedUrl;
+}
+
+const API_URL = getApiUrl();
+
+// ======================================================
+// API HELPER
+// ======================================================
+
+async function apiRequest<T = any>(
+  path: string,
+  options: RequestInit = {}
+): Promise<{
+  response: Response;
+  data: T | null;
+}> {
+  const cleanPath =
+    path.startsWith("/")
+      ? path
+      : `/${path}`;
+
+  const url =
+    `${API_URL}${cleanPath}`;
+
+  const headers = new Headers(
+    options.headers || {}
+  );
+
+  headers.set(
+    "Accept",
+    "application/json"
+  );
+
+  if (
+    options.body &&
+    !headers.has("Content-Type")
+  ) {
+    headers.set(
+      "Content-Type",
+      "application/json"
+    );
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(
+      url,
+      {
+        ...options,
+        headers,
+        credentials: "include",
+        cache: "no-store",
+      }
+    );
+  } catch (error) {
+    console.error(
+      "[API NETWORK ERROR]",
+      {
+        url,
+        error,
+      }
+    );
+
+    throw new Error(
+      "Unable to connect to the server. Please check your internet connection or try again."
+    );
+  }
+
+  const text =
+    await response.text();
+
+  let data: T | null = null;
+
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      console.error(
+        "[API NON-JSON RESPONSE]",
+        {
+          url,
+          status:
+            response.status,
+          body: text.slice(
+            0,
+            500
+          ),
+        }
+      );
+    }
+  }
+
+  return {
+    response,
+    data,
+  };
+}
+
+// ======================================================
+// API ERROR MESSAGE
+// ======================================================
+
+function getApiErrorMessage(
+  data: any,
+  fallback: string
+): string {
+  return (
+    data?.message ||
+    data?.error ||
+    data?.msg ||
+    fallback
+  );
+}
 
 // ======================================================
 // REQUIRED IDS
 // ======================================================
 
-function getRequiredIds(mode: string): number {
-  const currentMode = String(mode || "")
-    .toLowerCase()
-    .trim();
+function getRequiredIds(
+  mode: string
+): number {
+  const currentMode =
+    String(mode || "")
+      .toLowerCase()
+      .trim();
 
-  if (currentMode.includes("solo")) {
+  if (
+    currentMode.includes(
+      "solo"
+    )
+  ) {
     return 1;
   }
 
-  if (currentMode.includes("duo")) {
+  if (
+    currentMode.includes(
+      "duo"
+    )
+  ) {
     return 2;
   }
 
-  if (currentMode.includes("squad")) {
+  if (
+    currentMode.includes(
+      "squad"
+    )
+  ) {
     return 4;
   }
 
@@ -108,17 +322,18 @@ function getRequiredIds(mode: string): number {
 // EMPTY VALIDATION
 // ======================================================
 
-const createEmptyValidation = (): PlayerValidation => ({
-  checking: false,
-  checked: false,
-  valid: false,
-  message: "",
-  playerName: "",
-  userId: "",
-});
+const createEmptyValidation =
+  (): PlayerValidation => ({
+    checking: false,
+    checked: false,
+    valid: false,
+    message: "",
+    playerName: "",
+    userId: "",
+  });
 
 // ======================================================
-// EMPTY PLAYER
+// EMPTY VALIDATED PLAYER
 // ======================================================
 
 const createEmptyValidatedPlayer =
@@ -136,7 +351,9 @@ function getSavedGameUid(
   user: User,
   game: "BGMI" | "Free Fire"
 ): string {
-  if (game === "Free Fire") {
+  if (
+    game === "Free Fire"
+  ) {
     return String(
       user.freeFireUid ||
         user.freefireUid ||
@@ -160,9 +377,14 @@ function getSavedGameUid(
 // ======================================================
 
 export default function TournamentRegisterPage() {
-  const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  const params =
+    useParams();
+
+  const router =
+    useRouter();
+
+  const searchParams =
+    useSearchParams();
 
   // ====================================================
   // TOURNAMENT ID
@@ -176,111 +398,171 @@ export default function TournamentRegisterPage() {
       : "";
 
   const queryTournamentId =
-    searchParams?.get("tournamentId") ||
+    searchParams?.get(
+      "tournamentId"
+    ) ||
     searchParams?.get("id") ||
     "";
 
-  const tournamentId = String(
-    routeTournamentId || queryTournamentId || ""
-  ).trim();
+  const tournamentId =
+    String(
+      routeTournamentId ||
+        queryTournamentId ||
+        ""
+    ).trim();
 
   // ====================================================
   // STATE
   // ====================================================
 
-  const [tournament, setTournament] =
-    useState<Tournament | null>(null);
+  const [
+    tournament,
+    setTournament,
+  ] =
+    useState<Tournament | null>(
+      null
+    );
 
-  const [user, setUser] =
-    useState<User | null>(null);
+  const [
+    user,
+    setUser,
+  ] =
+    useState<User | null>(
+      null
+    );
 
-  const [loading, setLoading] =
+  const [
+    loading,
+    setLoading,
+  ] =
     useState(true);
 
-  const [error, setError] =
+  const [
+    error,
+    setError,
+  ] =
     useState("");
 
-  const [playerTeamName, setPlayerTeamName] =
+  const [
+    playerTeamName,
+    setPlayerTeamName,
+  ] =
     useState("");
 
-  const [players, setPlayers] =
-    useState<string[]>([""]);
+  const [
+    players,
+    setPlayers,
+  ] =
+    useState<string[]>([
+      "",
+    ]);
 
-  // ====================================================
-  // NEW: VALIDATED PLAYERS
-  // ====================================================
-
-  const [validatedPlayers, setValidatedPlayers] =
+  const [
+    validatedPlayers,
+    setValidatedPlayers,
+  ] =
     useState<ValidatedPlayer[]>([
       createEmptyValidatedPlayer(),
     ]);
 
-  const [validation, setValidation] =
+  const [
+    validation,
+    setValidation,
+  ] =
     useState<PlayerValidation[]>([
       createEmptyValidation(),
     ]);
 
-  // ====================================================
-  // OTHER STATE
-  // ====================================================
-
-  const [agreed, setAgreed] =
+  const [
+    agreed,
+    setAgreed,
+  ] =
     useState(false);
 
-  const [submitting, setSubmitting] =
+  const [
+    submitting,
+    setSubmitting,
+  ] =
     useState(false);
 
-  const [message, setMessage] =
+  const [
+    message,
+    setMessage,
+  ] =
     useState("");
 
-  const [submitError, setSubmitError] =
+  const [
+    submitError,
+    setSubmitError,
+  ] =
     useState("");
 
   // ====================================================
   // CONFIRMATION POPUP
   // ====================================================
 
-  const [showPopup, setShowPopup] =
+  const [
+    showPopup,
+    setShowPopup,
+  ] =
     useState(false);
 
-  const [levelConfirmed, setLevelConfirmed] =
+  const [
+    levelConfirmed,
+    setLevelConfirmed,
+  ] =
     useState(false);
 
   // ====================================================
   // ALREADY REGISTERED
   // ====================================================
 
-  const [alreadyRegistered, setAlreadyRegistered] =
+  const [
+    alreadyRegistered,
+    setAlreadyRegistered,
+  ] =
     useState(false);
 
   // ====================================================
   // PAYMENT MODAL
   // ====================================================
 
-  const [showPaymentModal, setShowPaymentModal] =
+  const [
+    showPaymentModal,
+    setShowPaymentModal,
+  ] =
     useState(false);
 
   // ====================================================
   // UTR
   // ====================================================
 
-  const [utr, setUtr] =
+  const [
+    utr,
+    setUtr,
+  ] =
     useState("");
 
   // ====================================================
   // REQUIRED IDS
   // ====================================================
 
-  const requiredIds = tournament
-    ? getRequiredIds(tournament.mode)
-    : 1;
+  const requiredIds =
+    tournament
+      ? getRequiredIds(
+          tournament.mode
+        )
+      : 1;
 
   // ====================================================
   // GAME
   // ====================================================
 
-  const game: "BGMI" | "Free Fire" =
-    tournament?.game === "Free Fire"
+  const game:
+    | "BGMI"
+    | "Free Fire" =
+    tournament?.game ===
+    "Free Fire"
       ? "Free Fire"
       : "BGMI";
 
@@ -290,210 +572,207 @@ export default function TournamentRegisterPage() {
 
   useEffect(() => {
     if (!tournamentId) {
-      setError("Invalid tournament ID.");
+      setError(
+        "Invalid tournament ID."
+      );
+
       setLoading(false);
+
       return;
     }
 
     let cancelled = false;
 
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        setError("");
-
-        // ============================================
-        // TOURNAMENT
-        // ============================================
-
-        const tournamentResponse =
-          await fetch(
-            `${API_URL}/api/tournaments/${encodeURIComponent(
-              tournamentId
-            )}`,
-            {
-              method: "GET",
-              credentials: "include",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            }
-          );
-
-        const tournamentText =
-          await tournamentResponse.text();
-
-        let tournamentData: any = {};
-
+    const loadData =
+      async () => {
         try {
-          tournamentData =
-            JSON.parse(tournamentText);
-        } catch {
-          console.error(
-            "Tournament API returned non JSON:",
-            tournamentText
-          );
-        }
+          setLoading(true);
+          setError("");
 
-        if (!tournamentResponse.ok) {
-          throw new Error(
-            tournamentData?.message ||
-              tournamentData?.error ||
-              "Tournament not found."
-          );
-        }
+          // ==========================================
+          // TOURNAMENT
+          // ==========================================
 
-        const tournamentInfo =
-          tournamentData?.tournament ||
-          tournamentData?.data?.tournament ||
-          tournamentData?.data ||
-          tournamentData;
-
-        if (!tournamentInfo?._id) {
-          throw new Error(
-            "Tournament information was not returned by the server."
-          );
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        setTournament(tournamentInfo);
-
-        // ============================================
-        // CURRENT USER
-        // ============================================
-
-        const userResponse =
-          await fetch(
-            `${API_URL}/api/auth/me`,
-            {
-              method: "GET",
-              credentials: "include",
-              cache: "no-store",
-              headers: {
-                Accept: "application/json",
-              },
-            }
-          );
-
-        const userText =
-          await userResponse.text();
-
-        let userData: any = {};
-
-        try {
-          userData =
-            JSON.parse(userText);
-        } catch {
-          console.error(
-            "User API returned non JSON:",
-            userText
-          );
-        }
-
-        if (!userResponse.ok) {
-          throw new Error(
-            userData?.message ||
-              userData?.error ||
-              "Please login before registering."
-          );
-        }
-
-        const currentUser =
-          userData?.user ||
-          userData?.data?.user ||
-          userData?.data ||
-          userData;
-
-        if (!currentUser) {
-          throw new Error(
-            "User information was not returned."
-          );
-        }
-
-        if (cancelled) {
-          return;
-        }
-
-        setUser(currentUser);
-
-        // ============================================
-        // SAVED GAME UID
-        // ============================================
-
-        const savedUid =
-          getSavedGameUid(
-            currentUser,
-            tournamentInfo.game
-          );
-
-        const required =
-          getRequiredIds(
-            tournamentInfo.mode
-          );
-
-        if (savedUid) {
-          const initialPlayers =
-            Array.from(
-              { length: required },
-              (_, index) =>
-                index === 0
-                  ? savedUid
-                  : ""
+          const {
+            response:
+              tournamentResponse,
+            data:
+              tournamentData,
+          } =
+            await apiRequest(
+              `/api/tournaments/${encodeURIComponent(
+                tournamentId
+              )}`,
+              {
+                method: "GET",
+              }
             );
 
-          setPlayers(initialPlayers);
+          if (
+            !tournamentResponse.ok
+          ) {
+            throw new Error(
+              getApiErrorMessage(
+                tournamentData,
+                "Tournament not found."
+              )
+            );
+          }
+
+          const tournamentInfo =
+            tournamentData?.tournament ||
+            tournamentData?.data?.tournament ||
+            tournamentData?.data ||
+            tournamentData;
+
+          if (
+            !tournamentInfo?._id
+          ) {
+            throw new Error(
+              "Tournament information was not returned by the server."
+            );
+          }
+
+          if (cancelled) {
+            return;
+          }
+
+          setTournament(
+            tournamentInfo
+          );
+
+          // ==========================================
+          // CURRENT USER
+          // ==========================================
+
+          const {
+            response:
+              userResponse,
+            data:
+              userData,
+          } =
+            await apiRequest(
+              "/api/auth/me",
+              {
+                method: "GET",
+              }
+            );
+
+          if (
+            !userResponse.ok
+          ) {
+            throw new Error(
+              getApiErrorMessage(
+                userData,
+                "Please login before registering."
+              )
+            );
+          }
+
+          const currentUser =
+            userData?.user ||
+            userData?.data?.user ||
+            userData?.data ||
+            userData;
+
+          if (!currentUser) {
+            throw new Error(
+              "User information was not returned by the server."
+            );
+          }
+
+          if (cancelled) {
+            return;
+          }
+
+          setUser(
+            currentUser
+          );
+
+          // ==========================================
+          // SAVED GAME UID
+          // ==========================================
+
+          const savedUid =
+            getSavedGameUid(
+              currentUser,
+              tournamentInfo.game
+            );
+
+          const required =
+            getRequiredIds(
+              tournamentInfo.mode
+            );
+
+          if (savedUid) {
+            setPlayers(
+              Array.from(
+                {
+                  length:
+                    required,
+                },
+                (_, index) =>
+                  index === 0
+                    ? savedUid
+                    : ""
+              )
+            );
+          } else {
+            setPlayers(
+              Array.from(
+                {
+                  length:
+                    required,
+                },
+                () => ""
+              )
+            );
+
+            setError(
+              `Please add your ${tournamentInfo.game} UID in Settings first.`
+            );
+          }
 
           setValidatedPlayers(
             Array.from(
-              { length: required },
-              (_, index) =>
-                index === 0
-                  ? createEmptyValidatedPlayer()
-                  : createEmptyValidatedPlayer()
+              {
+                length:
+                  required,
+              },
+              () =>
+                createEmptyValidatedPlayer()
             )
           );
 
           setValidation(
             Array.from(
-              { length: required },
-              () => createEmptyValidation()
+              {
+                length:
+                  required,
+              },
+              () =>
+                createEmptyValidation()
             )
           );
-        } else {
-          setPlayers(
-            Array.from(
-              { length: required },
-              () => ""
-            )
+        } catch (err) {
+          console.error(
+            "[REGISTRATION PAGE ERROR]",
+            err
           );
 
-          setError(
-            `Please add your ${tournamentInfo.game} UID in Settings first.`
-          );
+          if (!cancelled) {
+            setError(
+              err instanceof Error
+                ? err.message
+                : "Unable to load registration page."
+            );
+          }
+        } finally {
+          if (!cancelled) {
+            setLoading(false);
+          }
         }
-      } catch (err) {
-        console.error(
-          "Registration page error:",
-          err
-        );
-
-        if (!cancelled) {
-          setError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load registration page."
-          );
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
+      };
 
     loadData();
 
@@ -503,7 +782,7 @@ export default function TournamentRegisterPage() {
   }, [tournamentId]);
 
   // ====================================================
-  // CHANGE NUMBER OF PLAYER ID FIELDS
+  // CHANGE PLAYER COUNT
   // ====================================================
 
   useEffect(() => {
@@ -512,352 +791,425 @@ export default function TournamentRegisterPage() {
     }
 
     const required =
-      getRequiredIds(tournament.mode);
+      getRequiredIds(
+        tournament.mode
+      );
 
-    setPlayers((currentPlayers) => {
-      const updated = [
-        ...currentPlayers,
-      ];
+    setPlayers(
+      (currentPlayers) => {
+        const updated = [
+          ...currentPlayers,
+        ];
 
-      while (
-        updated.length < required
-      ) {
-        updated.push("");
-      }
-
-      if (
-        updated.length > required
-      ) {
-        updated.length = required;
-      }
-
-      if (user) {
-        const primaryUid =
-          getSavedGameUid(
-            user,
-            tournament.game
-          );
-
-        if (primaryUid) {
-          updated[0] = primaryUid;
+        while (
+          updated.length <
+          required
+        ) {
+          updated.push("");
         }
+
+        if (
+          updated.length >
+          required
+        ) {
+          updated.length =
+            required;
+        }
+
+        if (user) {
+          const primaryUid =
+            getSavedGameUid(
+              user,
+              tournament.game
+            );
+
+          if (primaryUid) {
+            updated[0] =
+              primaryUid;
+          }
+        }
+
+        return updated;
       }
+    );
 
-      return updated;
-    });
+    setValidation(
+      (current) => {
+        const updated = [
+          ...current,
+        ];
 
-    setValidation((current) => {
-      const updated = [...current];
+        while (
+          updated.length <
+          required
+        ) {
+          updated.push(
+            createEmptyValidation()
+          );
+        }
 
-      while (
-        updated.length < required
-      ) {
-        updated.push(
-          createEmptyValidation()
-        );
+        if (
+          updated.length >
+          required
+        ) {
+          updated.length =
+            required;
+        }
+
+        return updated;
       }
+    );
 
-      if (
-        updated.length > required
-      ) {
-        updated.length = required;
+    setValidatedPlayers(
+      (current) => {
+        const updated = [
+          ...current,
+        ];
+
+        while (
+          updated.length <
+          required
+        ) {
+          updated.push(
+            createEmptyValidatedPlayer()
+          );
+        }
+
+        if (
+          updated.length >
+          required
+        ) {
+          updated.length =
+            required;
+        }
+
+        return updated;
       }
-
-      return updated;
-    });
-
-    setValidatedPlayers((current) => {
-      const updated = [...current];
-
-      while (
-        updated.length < required
-      ) {
-        updated.push(
-          createEmptyValidatedPlayer()
-        );
-      }
-
-      if (
-        updated.length > required
-      ) {
-        updated.length = required;
-      }
-
-      return updated;
-    });
-  }, [tournament, user]);
+    );
+  }, [
+    tournament,
+    user,
+  ]);
 
   // ====================================================
   // VALIDATE PLAYER UID
   // ====================================================
 
-  const validatePlayerUid = async (
-    index: number,
-    uid: string
-  ): Promise<boolean> => {
-    const cleanUid =
-      String(uid || "").trim();
+  const validatePlayerUid =
+    useCallback(
+      async (
+        index: number,
+        uid: string
+      ): Promise<{
+        valid: boolean;
+        player?: ValidatedPlayer;
+        message?: string;
+      }> => {
+        const cleanUid =
+          String(
+            uid || ""
+          ).trim();
 
-    if (!cleanUid) {
-      setValidation((old) => {
-        const next = [...old];
+        if (!cleanUid) {
+          const result = {
+            valid: false,
+            message:
+              `${game} ID is required.`,
+          };
 
-        next[index] = {
-          checking: false,
-          checked: true,
-          valid: false,
-          message:
-            `${game} ID is required.`,
-          playerName: "",
-          userId: "",
-        };
+          setValidation(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-        return next;
-      });
+              next[index] = {
+                checking:
+                  false,
+                checked:
+                  true,
+                valid:
+                  false,
+                message:
+                  result.message,
+                playerName: "",
+                userId: "",
+              };
 
-      setValidatedPlayers((old) => {
-        const next = [...old];
+              return next;
+            }
+          );
 
-        next[index] =
-          createEmptyValidatedPlayer();
+          setValidatedPlayers(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-        return next;
-      });
+              next[index] =
+                createEmptyValidatedPlayer();
 
-      return false;
-    }
+              return next;
+            }
+          );
 
-    // ================================================
-    // CHECKING
-    // ================================================
-
-    setValidation((old) => {
-      const next = [...old];
-
-      next[index] = {
-        checking: true,
-        checked: false,
-        valid: false,
-        message:
-          `Checking ${game} ID...`,
-        playerName: "",
-        userId: "",
-      };
-
-      return next;
-    });
-
-    try {
-      const query =
-        new URLSearchParams();
-
-      query.set(
-        "uid",
-        cleanUid
-      );
-
-      query.set(
-        "game",
-        game
-      );
-
-      const validationUrl =
-        `${API_URL}/api/registrations/validate-player-uid?${query.toString()}`;
-
-      console.log(
-        "[MAIN TOURNAMENT] VALIDATE PLAYER:",
-        {
-          index: index + 1,
-          tournamentId,
-          game,
-          uid: cleanUid,
-          url: validationUrl,
+          return result;
         }
-      );
 
-      const response =
-        await fetch(
-          validationUrl,
-          {
-            method: "GET",
-            credentials: "include",
-            cache: "no-store",
-            headers: {
-              Accept:
-                "application/json",
-            },
+        // ==========================================
+        // CHECKING
+        // ==========================================
+
+        setValidation(
+          (old) => {
+            const next = [
+              ...old,
+            ];
+
+            next[index] = {
+              checking:
+                true,
+              checked:
+                false,
+              valid:
+                false,
+              message:
+                `Checking ${game} ID...`,
+              playerName: "",
+              userId: "",
+            };
+
+            return next;
           }
         );
 
-      const text =
-        await response.text();
+        try {
+          const query =
+            new URLSearchParams();
 
-      let data: any = {};
+          query.set(
+            "uid",
+            cleanUid
+          );
 
-      try {
-        data = JSON.parse(text);
-      } catch {
-        console.error(
-          "UID validation returned non JSON:",
-          text
-        );
-      }
+          query.set(
+            "game",
+            game
+          );
 
-      console.log(
-        "[MAIN TOURNAMENT] UID VALIDATION RESPONSE:",
-        response.status,
-        data
-      );
+          const {
+            response,
+            data,
+          } =
+            await apiRequest(
+              `/api/registrations/validate-player-uid?${query.toString()}`,
+              {
+                method: "GET",
+              }
+            );
 
-      if (!response.ok) {
-        throw new Error(
-          data?.message ||
-            data?.error ||
-            "Player ID is not registered."
-        );
-      }
+          console.log(
+            "[PLAYER UID VALIDATION]",
+            {
+              index:
+                index + 1,
+              game,
+              uid:
+                cleanUid,
+              status:
+                response.status,
+              data,
+            }
+          );
 
-      // ================================================
-      // RESPONSE PLAYER
-      // ================================================
+          if (
+            !response.ok
+          ) {
+            throw new Error(
+              getApiErrorMessage(
+                data,
+                "Player ID is not registered."
+              )
+            );
+          }
 
-      const player =
-        data?.user ||
-        data?.player ||
-        data?.data?.user ||
-        data?.data?.player ||
-        data?.data ||
-        null;
+          const player =
+            data?.user ||
+            data?.player ||
+            data?.data?.user ||
+            data?.data?.player ||
+            data?.data ||
+            null;
 
-      const playerName =
-        player?.playerName ||
-        player?.name ||
-        player?.username ||
-        player?.fullName ||
-        "";
+          const playerName =
+            player?.playerName ||
+            player?.name ||
+            player?.username ||
+            player?.fullName ||
+            "";
 
-      const userId =
-        player?.userId ||
-        player?.user?._id ||
-        player?.user?.id ||
-        player?.user ||
-        player?._id ||
-        player?.id ||
-        "";
+          const userId =
+            player?.userId ||
+            player?.user?._id ||
+            player?.user?.id ||
+            player?.user ||
+            player?._id ||
+            player?.id ||
+            "";
 
-      const returnedUid =
-        player?.gameUid ||
-        player?.uid ||
-        player?.gameId ||
-        cleanUid;
+          const returnedUid =
+            player?.gameUid ||
+            player?.uid ||
+            player?.gameId ||
+            cleanUid;
 
-      const valid =
-        data?.valid === true ||
-        data?.success === true ||
-        Boolean(player);
+          const valid =
+            data?.valid === true ||
+            data?.success === true ||
+            Boolean(player);
 
-      if (
-        !valid ||
-        !String(userId).trim()
-      ) {
-        throw new Error(
-          data?.message ||
-            "This Game ID is not registered in the users database."
-        );
-      }
+          if (
+            !valid ||
+            !String(
+              userId
+            ).trim()
+          ) {
+            throw new Error(
+              getApiErrorMessage(
+                data,
+                "This Game ID is not registered in the users database."
+              )
+            );
+          }
 
-      // ================================================
-      // NORMALIZE
-      // ================================================
+          const normalizedPlayer: ValidatedPlayer =
+            {
+              gameUid:
+                String(
+                  returnedUid
+                ).trim(),
 
-      const normalizedPlayer: ValidatedPlayer = {
-        gameUid:
-          String(
-            returnedUid
-          ).trim(),
+              playerName:
+                String(
+                  playerName ||
+                    "Registered Player"
+                ).trim(),
 
-        playerName:
-          String(
-            playerName ||
-              "Registered Player"
-          ).trim(),
+              user:
+                String(
+                  userId
+                ).trim(),
+            };
 
-        user:
-          String(userId).trim(),
-      };
+          // ========================================
+          // SAVE VALIDATED PLAYER
+          // ========================================
 
-      // ================================================
-      // SAVE VALIDATED PLAYER
-      // ================================================
+          setValidatedPlayers(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-      setValidatedPlayers((old) => {
-        const next = [...old];
+              next[index] =
+                normalizedPlayer;
 
-        next[index] =
-          normalizedPlayer;
+              return next;
+            }
+          );
 
-        return next;
-      });
+          // ========================================
+          // SAVE VALIDATION
+          // ========================================
 
-      // ================================================
-      // SAVE VALIDATION
-      // ================================================
+          setValidation(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-      setValidation((old) => {
-        const next = [...old];
+              next[index] = {
+                checking:
+                  false,
+                checked:
+                  true,
+                valid:
+                  true,
+                message:
+                  `Valid player: ${normalizedPlayer.playerName}`,
+                playerName:
+                  normalizedPlayer.playerName,
+                userId:
+                  normalizedPlayer.user,
+              };
 
-        next[index] = {
-          checking: false,
-          checked: true,
-          valid: true,
-          message:
-            `Valid player: ${normalizedPlayer.playerName}`,
-          playerName:
-            normalizedPlayer.playerName,
-          userId:
-            normalizedPlayer.user,
-        };
+              return next;
+            }
+          );
 
-        return next;
-      });
+          return {
+            valid: true,
+            player:
+              normalizedPlayer,
+          };
+        } catch (err) {
+          console.error(
+            "[PLAYER UID VALIDATION ERROR]",
+            err
+          );
 
-      return true;
-    } catch (err) {
-      console.error(
-        "Player UID validation error:",
-        err
-      );
-
-      setValidation((old) => {
-        const next = [...old];
-
-        next[index] = {
-          checking: false,
-          checked: true,
-          valid: false,
-          message:
+          const errorMessage =
             err instanceof Error
               ? err.message
-              : `Player ${index + 1} ${game} ID is not registered.`,
-          playerName: "",
-          userId: "",
-        };
+              : `Player ${index + 1} ${game} ID is not registered.`;
 
-        return next;
-      });
+          setValidation(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-      setValidatedPlayers((old) => {
-        const next = [...old];
+              next[index] = {
+                checking:
+                  false,
+                checked:
+                  true,
+                valid:
+                  false,
+                message:
+                  errorMessage,
+                playerName: "",
+                userId: "",
+              };
 
-        next[index] =
-          createEmptyValidatedPlayer();
+              return next;
+            }
+          );
 
-        return next;
-      });
+          setValidatedPlayers(
+            (old) => {
+              const next = [
+                ...old,
+              ];
 
-      return false;
-    }
-  };
+              next[index] =
+                createEmptyValidatedPlayer();
+
+              return next;
+            }
+          );
+
+          return {
+            valid: false,
+            message:
+              errorMessage,
+          };
+        }
+      },
+      [
+        game,
+      ]
+    );
 
   // ====================================================
   // AUTOMATICALLY VALIDATE PLAYER 1
@@ -879,64 +1231,73 @@ export default function TournamentRegisterPage() {
       0,
       leaderUid
     );
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     players[0],
     game,
     tournamentId,
-    tournament?._id,
+    tournament,
+    validatePlayerUid,
   ]);
 
   // ====================================================
   // PLAYER ID CHANGE
   // ====================================================
 
-  const handlePlayerChange = (
-    index: number,
-    value: string
-  ) => {
-    // Player 1 belongs to logged-in user
-    if (index === 0) {
-      return;
-    }
+  const handlePlayerChange =
+    (
+      index: number,
+      value: string
+    ) => {
+      // Player 1 belongs to logged-in user.
+      if (index === 0) {
+        return;
+      }
 
-    setPlayers((currentPlayers) => {
-      const updated = [
-        ...currentPlayers,
-      ];
+      setPlayers(
+        (currentPlayers) => {
+          const updated = [
+            ...currentPlayers,
+          ];
 
-      updated[index] = value;
+          updated[index] =
+            value;
 
-      return updated;
-    });
+          return updated;
+        }
+      );
 
-    // Clear previous validation
-    setValidation((old) => {
-      const next = [...old];
+      setValidation(
+        (old) => {
+          const next = [
+            ...old,
+          ];
 
-      next[index] =
-        createEmptyValidation();
+          next[index] =
+            createEmptyValidation();
 
-      return next;
-    });
+          return next;
+        }
+      );
 
-    // Clear previous validated player
-    setValidatedPlayers((old) => {
-      const next = [...old];
+      setValidatedPlayers(
+        (old) => {
+          const next = [
+            ...old,
+          ];
 
-      next[index] =
-        createEmptyValidatedPlayer();
+          next[index] =
+            createEmptyValidatedPlayer();
 
-      return next;
-    });
+          return next;
+        }
+      );
 
-    setSubmitError("");
-    setMessage("");
-  };
+      setSubmitError("");
+      setMessage("");
+    };
 
   // ====================================================
-  // ALL REQUIRED PLAYERS VALID
+  // ALL PLAYERS VALID
   // ====================================================
 
   const allPlayersValid =
@@ -963,10 +1324,13 @@ export default function TournamentRegisterPage() {
       }
 
       const allIdsPresent =
-        players.every((id) =>
-          Boolean(
-            String(id || "").trim()
-          )
+        players.every(
+          (id) =>
+            Boolean(
+              String(
+                id || ""
+              ).trim()
+            )
         );
 
       const allValid =
@@ -976,7 +1340,8 @@ export default function TournamentRegisterPage() {
             item.valid &&
             Boolean(
               String(
-                item.userId || ""
+                item.userId ||
+                  ""
               ).trim()
             )
         );
@@ -986,12 +1351,14 @@ export default function TournamentRegisterPage() {
           (player) =>
             Boolean(
               String(
-                player.gameUid || ""
+                player.gameUid ||
+                  ""
               ).trim()
             ) &&
             Boolean(
               String(
-                player.user || ""
+                player.user ||
+                  ""
               ).trim()
             )
         );
@@ -1017,10 +1384,6 @@ export default function TournamentRegisterPage() {
       setSubmitError("");
       setMessage("");
 
-      // ==============================================
-      // ALREADY REGISTERED
-      // ==============================================
-
       if (alreadyRegistered) {
         setSubmitError(
           "You are already registered for this tournament."
@@ -1029,11 +1392,9 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // TEAM NAME
-      // ==============================================
-
-      if (!playerTeamName.trim()) {
+      if (
+        !playerTeamName.trim()
+      ) {
         setSubmitError(
           "Please enter player/team name."
         );
@@ -1045,24 +1406,37 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // IDS
-      // ==============================================
+      if (!user) {
+        setSubmitError(
+          "Please login before registering."
+        );
+
+        return;
+      }
+
+      // ==========================================
+      // PLAYER IDS
+      // ==========================================
 
       const ids =
         players
-          .map((id) =>
-            id.trim()
+          .slice(
+            0,
+            requiredIds
           )
-          .filter(Boolean);
-
-      // ==============================================
-      // EXACT COUNT
-      // ==============================================
+          .map(
+            (id) =>
+              String(
+                id || ""
+              ).trim()
+          );
 
       if (
         ids.length !==
-        requiredIds
+        requiredIds ||
+        ids.some(
+          (id) => !id
+        )
       ) {
         setSubmitError(
           `${tournament.mode} tournament requires exactly ${requiredIds} game ID${
@@ -1075,14 +1449,15 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
+      // ==========================================
       // DUPLICATES
-      // ==============================================
+      // ==========================================
 
       const uniqueIds =
         new Set(
-          ids.map((id) =>
-            id.toLowerCase()
+          ids.map(
+            (id) =>
+              id.toLowerCase()
           )
         );
 
@@ -1097,21 +1472,9 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // USER
-      // ==============================================
-
-      if (!user) {
-        setSubmitError(
-          "Please login before registering."
-        );
-
-        return;
-      }
-
-      // ==============================================
-      // PRIMARY USER UID
-      // ==============================================
+      // ==========================================
+      // PRIMARY UID
+      // ==========================================
 
       const primaryUid =
         getSavedGameUid(
@@ -1127,10 +1490,6 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // PLAYER 1 MUST BE USER
-      // ==============================================
-
       if (
         ids[0] !==
         primaryUid.trim()
@@ -1142,9 +1501,9 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
+      // ==========================================
       // TERMS
-      // ==============================================
+      // ==========================================
 
       if (!agreed) {
         setSubmitError(
@@ -1154,86 +1513,77 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // VALIDATE ALL PLAYERS
-      // ==============================================
+      // ==========================================
+      // VALIDATE EVERY PLAYER
+      //
+      // IMPORTANT:
+      // Use local results instead of immediately
+      // reading React state after setState().
+      // ==========================================
 
       setSubmitError("");
+
+      const freshValidatedPlayers: ValidatedPlayer[] =
+        [];
 
       for (
         let index = 0;
         index < requiredIds;
         index++
       ) {
-        const valid =
+        const result =
           await validatePlayerUid(
             index,
             ids[index]
           );
 
-        if (!valid) {
+        if (
+          !result.valid ||
+          !result.player
+        ) {
           setSubmitError(
-            validation[index]
-              ?.message ||
+            result.message ||
               `Player ${index + 1} ${tournament.game} ID could not be verified.`
           );
 
           return;
         }
+
+        freshValidatedPlayers.push(
+          result.player
+        );
       }
 
-      // ==============================================
-      // IMPORTANT:
-      // State updates are asynchronous.
-      // Re-check validation directly from the
-      // server results is safer by validating again
-      // through current player data below.
-      // ==============================================
+      // ==========================================
+      // EXACT VALIDATION COUNT
+      // ==========================================
 
-      const currentValidated =
-        validatedPlayers.slice(
-          0,
-          requiredIds
-        );
-
-      const currentValidation =
-        validation.slice(
-          0,
-          requiredIds
-        );
-
-      // If state has not caught up yet, do one
-      // more validation pass before opening popup.
       if (
-        currentValidated.length !==
-          requiredIds ||
-        currentValidation.length !==
-          requiredIds ||
-        currentValidation.some(
-          (item) =>
-            !item.checked ||
-            !item.valid
-        )
+        freshValidatedPlayers.length !==
+        requiredIds
       ) {
-        // The server validations above have already
-        // completed. Give React state one tick.
-        await new Promise(
-          (resolve) =>
-            setTimeout(resolve, 0)
+        setSubmitError(
+          `Exactly ${requiredIds} validated players are required.`
         );
+
+        return;
       }
 
-      // ==============================================
+      // ==========================================
       // OPEN POPUP
-      // ==============================================
+      // ==========================================
 
-      setLevelConfirmed(false);
-      setShowPopup(true);
+      setLevelConfirmed(
+        false
+      );
+
+      setShowPopup(
+        true
+      );
     };
 
   // ====================================================
   // CONFIRM REGISTRATION
-  // ONLY OPENS PAYMENT
   // ====================================================
 
   const handleConfirmRegistration =
@@ -1257,14 +1607,19 @@ export default function TournamentRegisterPage() {
       setSubmitError("");
       setMessage("");
 
-      setShowPopup(false);
-      setLevelConfirmed(false);
+      setShowPopup(
+        false
+      );
+
+      setLevelConfirmed(
+        false
+      );
 
       setUtr("");
-      setSubmitError("");
-      setMessage("");
 
-      setShowPaymentModal(true);
+      setShowPaymentModal(
+        true
+      );
     };
 
   // ====================================================
@@ -1284,9 +1639,9 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
+      // ==========================================
       // UTR
-      // ==============================================
+      // ==========================================
 
       const cleanUtr =
         utr.trim();
@@ -1309,21 +1664,29 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // FINAL PLAYER CHECK
-      // ==============================================
+      // ==========================================
+      // PLAYER IDS
+      // ==========================================
 
       const ids =
         players
-          .slice(0, requiredIds)
-          .map((id) =>
-            String(id || "").trim()
+          .slice(
+            0,
+            requiredIds
+          )
+          .map(
+            (id) =>
+              String(
+                id || ""
+              ).trim()
           );
 
       if (
         ids.length !==
           requiredIds ||
-        ids.some((id) => !id)
+        ids.some(
+          (id) => !id
+        )
       ) {
         setSubmitError(
           `Exactly ${requiredIds} ${tournament.game} IDs are required.`
@@ -1332,14 +1695,15 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // DUPLICATE CHECK
-      // ==============================================
+      // ==========================================
+      // DUPLICATES
+      // ==========================================
 
       const uniqueIds =
         new Set(
-          ids.map((id) =>
-            id.toLowerCase()
+          ids.map(
+            (id) =>
+              id.toLowerCase()
           )
         );
 
@@ -1354,18 +1718,42 @@ export default function TournamentRegisterPage() {
         return;
       }
 
-      // ==============================================
-      // RE-VALIDATE BEFORE PAYMENT SUBMIT
-      //
-      // This prevents modified/stale IDs from being
-      // submitted after the confirmation popup.
-      // ==============================================
+      // ==========================================
+      // PRIMARY UID CHECK
+      // ==========================================
 
-      setSubmitting(true);
+      const primaryUid =
+        getSavedGameUid(
+          user,
+          tournament.game
+        );
+
+      if (
+        !primaryUid ||
+        ids[0] !==
+          primaryUid.trim()
+      ) {
+        setSubmitError(
+          `Player 1 must be your saved ${tournament.game} UID.`
+        );
+
+        return;
+      }
+
+      setSubmitting(
+        true
+      );
+
       setSubmitError("");
       setMessage("");
 
       try {
+        // ==========================================
+        // FINAL SERVER VALIDATION
+        //
+        // Do not trust old browser state.
+        // ==========================================
+
         const finalValidatedPlayers: ValidatedPlayer[] =
           [];
 
@@ -1374,143 +1762,30 @@ export default function TournamentRegisterPage() {
           index < requiredIds;
           index++
         ) {
-          const valid =
+          const result =
             await validatePlayerUid(
               index,
               ids[index]
             );
 
-          if (!valid) {
-            throw new Error(
-              `Player ${index + 1} ${tournament.game} ID could not be verified.`
-            );
-          }
-
-          // ==========================================
-          // The validation endpoint has returned the
-          // player. Read it from the latest state is
-          // asynchronous, so perform a direct request
-          // here to get the exact server result.
-          // ==========================================
-
-          const query =
-            new URLSearchParams();
-
-          query.set(
-            "uid",
-            ids[index]
-          );
-
-          query.set(
-            "game",
-            game
-          );
-
-          const validationResponse =
-            await fetch(
-              `${API_URL}/api/registrations/validate-player-uid?${query.toString()}`,
-              {
-                method: "GET",
-                credentials: "include",
-                cache: "no-store",
-                headers: {
-                  Accept:
-                    "application/json",
-                },
-              }
-            );
-
-          const validationText =
-            await validationResponse.text();
-
-          let validationData: any =
-            {};
-
-          try {
-            validationData =
-              JSON.parse(
-                validationText
-              );
-          } catch {
-            // handled below
-          }
-
           if (
-            !validationResponse.ok
+            !result.valid ||
+            !result.player
           ) {
             throw new Error(
-              validationData?.message ||
-                validationData?.error ||
-                `Player ${index + 1} validation failed.`
+              result.message ||
+                `Player ${index + 1} ${tournament.game} ID could not be verified.`
             );
           }
 
-          const player =
-            validationData?.user ||
-            validationData?.player ||
-            validationData?.data?.user ||
-            validationData?.data?.player ||
-            validationData?.data ||
-            null;
-
-          const playerName =
-            player?.playerName ||
-            player?.name ||
-            player?.username ||
-            player?.fullName ||
-            "Registered Player";
-
-          const userId =
-            player?.userId ||
-            player?.user?._id ||
-            player?.user?.id ||
-            player?.user ||
-            player?._id ||
-            player?.id ||
-            "";
-
-          const returnedUid =
-            player?.gameUid ||
-            player?.uid ||
-            player?.gameId ||
-            ids[index];
-
-          const validResponse =
-            validationData?.valid === true ||
-            validationData?.success === true ||
-            Boolean(player);
-
-          if (
-            !validResponse ||
-            !String(userId).trim()
-          ) {
-            throw new Error(
-              validationData?.message ||
-                `Player ${index + 1} is not registered in the users database.`
-            );
-          }
-
-          finalValidatedPlayers.push({
-            gameUid:
-              String(
-                returnedUid
-              ).trim(),
-
-            playerName:
-              String(
-                playerName
-              ).trim(),
-
-            user:
-              String(
-                userId
-              ).trim(),
-          });
+          finalValidatedPlayers.push(
+            result.player
+          );
         }
 
-        // ==============================================
-        // FINAL VALIDATED PLAYER COUNT
-        // ==============================================
+        // ==========================================
+        // FINAL COUNT
+        // ==========================================
 
         if (
           finalValidatedPlayers.length !==
@@ -1521,24 +1796,44 @@ export default function TournamentRegisterPage() {
           );
         }
 
-        // ==============================================
-        // CREATE REGISTRATION
-        // ==============================================
+        // ==========================================
+        // DUPLICATE VALIDATED IDS
+        // ==========================================
 
-        const response =
-          await fetch(
-            `${API_URL}/api/registrations`,
+        const validatedIds =
+          finalValidatedPlayers.map(
+            (player) =>
+              player.gameUid
+                .trim()
+                .toLowerCase()
+          );
+
+        const uniqueValidatedIds =
+          new Set(
+            validatedIds
+          );
+
+        if (
+          uniqueValidatedIds.size !==
+          validatedIds.length
+        ) {
+          throw new Error(
+            "The same game ID cannot be used more than once."
+          );
+        }
+
+        // ==========================================
+        // CREATE REGISTRATION
+        // ==========================================
+
+        const {
+          response,
+          data,
+        } =
+          await apiRequest(
+            "/api/registrations",
             {
               method: "POST",
-
-              headers: {
-                "Content-Type":
-                  "application/json",
-                Accept:
-                  "application/json",
-              },
-
-              credentials: "include",
 
               body: JSON.stringify({
                 tournament:
@@ -1547,54 +1842,49 @@ export default function TournamentRegisterPage() {
                 playerTeamName:
                   playerTeamName.trim(),
 
-                // Keep original main feature
+                // Main/leader UID
                 gameUid:
-                  ids[0],
+                  finalValidatedPlayers[0]
+                    .gameUid,
 
-                // ======================================
-                // NEW:
-                // SEND VALIDATED PLAYER OBJECTS
-                // ======================================
-
+                // All verified player UIDs
                 players:
                   finalValidatedPlayers.map(
-                    (player) => player.gameUid
+                    (player) =>
+                      player.gameUid
                   ),
 
-                // ======================================
                 // UTR
-                // ======================================
-
                 utr:
                   cleanUtr,
               }),
             }
           );
 
-        const data =
-          await response
-            .json()
-            .catch(
-              () => null
-            );
-
         console.log(
-          "[MAIN TOURNAMENT] REGISTRATION RESPONSE:",
-          response.status,
-          data
+          "[REGISTRATION RESPONSE]",
+          {
+            status:
+              response.status,
+            data,
+          }
         );
 
-        // ==============================================
+        // ==========================================
         // ALREADY REGISTERED
-        // ==============================================
+        // ==========================================
 
         if (
-          response.status === 400 ||
-          response.status === 409
+          response.status ===
+            400 ||
+          response.status ===
+            409
         ) {
           const backendMessage =
-            data?.message ||
-            "";
+            getApiErrorMessage(
+              data,
+              ""
+            );
 
           if (
             backendMessage
@@ -1631,23 +1921,30 @@ export default function TournamentRegisterPage() {
           }
         }
 
-        // ==============================================
+        // ==========================================
         // OTHER BACKEND ERROR
-        // ==============================================
+        // ==========================================
 
-        if (!response.ok) {
+        if (
+          !response.ok
+        ) {
           throw new Error(
-            data?.message ||
-              data?.error ||
+            getApiErrorMessage(
+              data,
               "Registration failed."
+            )
           );
         }
 
-        // ==============================================
+        // ==========================================
         // SUCCESS
-        // ==============================================
+        // ==========================================
 
         setShowPaymentModal(
+          false
+        );
+
+        setShowPopup(
           false
         );
 
@@ -1661,18 +1958,21 @@ export default function TournamentRegisterPage() {
           "Payment submitted successfully. Your registration is pending admin verification."
         );
 
-        // ==============================================
+        // ==========================================
         // REDIRECT
-        // ==============================================
+        // ==========================================
 
-        setTimeout(() => {
-          router.push(
-            "/my-tournaments"
-          );
-        }, 1500);
+        window.setTimeout(
+          () => {
+            router.push(
+              "/my-tournaments"
+            );
+          },
+          1500
+        );
       } catch (err) {
         console.error(
-          "Registration error:",
+          "[REGISTRATION ERROR]",
           err
         );
 
@@ -1682,7 +1982,9 @@ export default function TournamentRegisterPage() {
             : "Registration failed."
         );
       } finally {
-        setSubmitting(false);
+        setSubmitting(
+          false
+        );
       }
     };
 
@@ -1714,6 +2016,7 @@ export default function TournamentRegisterPage() {
       <main className="min-h-screen bg-slate-50 text-slate-900">
         <div className="flex min-h-screen items-center justify-center px-5">
           <div className="text-center">
+
             <div className="text-4xl">
               ⚠️
             </div>
@@ -1733,6 +2036,7 @@ export default function TournamentRegisterPage() {
             >
               Back to Tournaments
             </Link>
+
           </div>
         </div>
       </main>
@@ -1878,6 +2182,7 @@ export default function TournamentRegisterPage() {
                     alreadyRegistered
                   }
                   placeholder="Enter player or team name"
+                  maxLength={100}
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
                 />
 
@@ -1904,10 +2209,15 @@ export default function TournamentRegisterPage() {
                 <div className="mt-4 space-y-4">
 
                   {players.map(
-                    (player, index) => {
+                    (
+                      player,
+                      index
+                    ) => {
 
                       const itemValidation =
-                        validation[index];
+                        validation[
+                          index
+                        ];
 
                       return (
                         <div
@@ -1925,7 +2235,9 @@ export default function TournamentRegisterPage() {
                           <input
                             id={`player-${index}`}
                             type="text"
-                            value={player}
+                            value={
+                              player
+                            }
                             onChange={(e) =>
                               handlePlayerChange(
                                 index,
@@ -1933,17 +2245,21 @@ export default function TournamentRegisterPage() {
                               )
                             }
                             readOnly={
-                              index === 0 &&
+                              index ===
+                                0 &&
                               !!player
                             }
                             disabled={
                               alreadyRegistered
                             }
+                            autoComplete="off"
                             placeholder={
-                              index === 0
+                              index ===
+                              0
                                 ? `Your ${tournament.game} UID`
                                 : `Enter Player ${
-                                    index + 1
+                                    index +
+                                    1
                                   } ${tournament.game} UID`
                             }
                             className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500 disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -1954,16 +2270,15 @@ export default function TournamentRegisterPage() {
                                 ? "border-red-500/50 bg-red-950/20"
                                 : "border-slate-200 bg-slate-50"
                             } ${
-                              index === 0 &&
+                              index ===
+                                0 &&
                               player
                                 ? "cursor-not-allowed"
                                 : ""
                             }`}
                           />
 
-                          {/* =====================================
-                              VALIDATION STATUS
-                          ===================================== */}
+                          {/* VALIDATING */}
 
                           {itemValidation?.checking && (
                             <p className="mt-2 text-xs text-blue-700">
@@ -1972,38 +2287,54 @@ export default function TournamentRegisterPage() {
                             </p>
                           )}
 
+                          {/* VALID */}
+
                           {itemValidation?.checked &&
                             itemValidation.valid && (
                               <div className="mt-2 rounded-lg border border-green-500/20 bg-blue-600/5 px-3 py-2">
 
                                 <p className="text-xs font-semibold text-green-400">
                                   ✓{" "}
-                                  {itemValidation.message}
+                                  {
+                                    itemValidation.message
+                                  }
                                 </p>
 
                                 <p className="mt-1 text-xs text-slate-500">
                                   User ID:{" "}
-                                  {itemValidation.userId}
+                                  {
+                                    itemValidation.userId
+                                  }
                                 </p>
 
                               </div>
                             )}
 
+                          {/* INVALID */}
+
                           {itemValidation?.checked &&
                             !itemValidation.valid && (
                               <p className="mt-2 text-xs text-red-400">
                                 ✕{" "}
-                                {itemValidation.message}
+                                {
+                                  itemValidation.message
+                                }
                               </p>
                             )}
 
-                          {index === 0 &&
+                          {/* NO UID */}
+
+                          {index ===
+                            0 &&
                             !player && (
                               <p className="mt-2 text-xs text-blue-600">
 
                                 Your{" "}
-                                {tournament.game} UID
-                                is not available.{" "}
+                                {
+                                  tournament.game
+                                }{" "}
+                                UID is not
+                                available.{" "}
 
                                 <Link
                                   href="/settings"
@@ -2023,7 +2354,6 @@ export default function TournamentRegisterPage() {
                   )}
 
                 </div>
-
               </div>
 
               {/* =================================================
@@ -2084,7 +2414,9 @@ export default function TournamentRegisterPage() {
                   <input
                     id="terms"
                     type="checkbox"
-                    checked={agreed}
+                    checked={
+                      agreed
+                    }
                     onChange={(e) =>
                       setAgreed(
                         e.target.checked
@@ -2187,7 +2519,8 @@ export default function TournamentRegisterPage() {
                       players.filter(
                         (id) =>
                           id.trim()
-                            .length > 0
+                            .length >
+                          0
                       ).length
                     }{" "}
                     /{" "}
@@ -2236,7 +2569,9 @@ export default function TournamentRegisterPage() {
 
                   <span className="text-xl font-black text-blue-600">
                     ₹
-                    {tournament.entryFee}
+                    {
+                      tournament.entryFee
+                    }
                   </span>
 
                 </div>
@@ -2314,7 +2649,9 @@ export default function TournamentRegisterPage() {
 
                   All submitted{" "}
                   <span className="font-bold text-slate-900">
-                    {tournament.game}
+                    {
+                      tournament.game
+                    }
                   </span>{" "}
                   IDs must belong to registered
                   player accounts and satisfy the
@@ -2342,7 +2679,10 @@ export default function TournamentRegisterPage() {
                 <div className="mt-3 space-y-2">
 
                   {players.map(
-                    (id, index) => {
+                    (
+                      id,
+                      index
+                    ) => {
 
                       const item =
                         validatedPlayers[
@@ -2359,7 +2699,10 @@ export default function TournamentRegisterPage() {
 
                             <span className="text-sm text-slate-500">
                               Player{" "}
-                              {index + 1}
+                              {
+                                index +
+                                1
+                              }
                             </span>
 
                             <span className="font-mono text-sm font-bold text-slate-900">
@@ -2371,7 +2714,9 @@ export default function TournamentRegisterPage() {
                           {item?.playerName && (
                             <p className="mt-2 text-xs text-green-400">
                               ✓{" "}
-                              {item.playerName}
+                              {
+                                item.playerName
+                              }
                             </p>
                           )}
 
@@ -2495,12 +2840,14 @@ export default function TournamentRegisterPage() {
 
                 <p className="mt-2 text-3xl font-black text-blue-600">
                   ₹
-                  {tournament.entryFee}
+                  {
+                    tournament.entryFee
+                  }
                 </p>
 
               </div>
 
-              {/* QR CODE */}
+              {/* QR */}
 
               <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5">
 
@@ -2536,7 +2883,9 @@ export default function TournamentRegisterPage() {
 
                   <li>
                     2. Pay exactly ₹
-                    {tournament.entryFee}.
+                    {
+                      tournament.entryFee
+                    }.
                   </li>
 
                   <li>
@@ -2578,20 +2927,25 @@ export default function TournamentRegisterPage() {
                 <input
                   id="utr"
                   type="text"
-                  value={utr}
+                  value={
+                    utr
+                  }
                   onChange={(e) => {
-
                     setUtr(
                       e.target.value
                     );
 
-                    if (submitError) {
-                      setSubmitError("");
+                    if (
+                      submitError
+                    ) {
+                      setSubmitError(
+                        ""
+                      );
                     }
-
                   }}
                   placeholder="Enter your UTR / Transaction ID"
                   autoComplete="off"
+                  maxLength={100}
                   required
                   className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-400 focus:border-blue-500"
                 />
@@ -2620,7 +2974,9 @@ export default function TournamentRegisterPage() {
                   type="button"
                   onClick={() => {
 
-                    if (submitting) {
+                    if (
+                      submitting
+                    ) {
                       return;
                     }
 
@@ -2630,7 +2986,9 @@ export default function TournamentRegisterPage() {
 
                     setUtr("");
 
-                    setSubmitError("");
+                    setSubmitError(
+                      ""
+                    );
                   }}
                   disabled={
                     submitting

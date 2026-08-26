@@ -18,9 +18,23 @@ export default function VerifyPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // ======================================================
+  // API URL
+  // ======================================================
+  // Production:
+  // NEXT_PUBLIC_API_URL is set in Vercel Environment Variables.
+  //
+  // Local development:
+  // If the environment variable is not present,
+  // it falls back to localhost:5001.
+  // ======================================================
+
   const API_URL =
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:5001";
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+
+  // ======================================================
+  // LOAD REGISTRATION SESSION
+  // ======================================================
 
   useEffect(() => {
     const storedRegistrationId =
@@ -46,6 +60,10 @@ export default function VerifyPage() {
     setGame(storedGame || "");
   }, [router]);
 
+  // ======================================================
+  // OTP INPUT
+  // ======================================================
+
   const handleOtpChange = (
     e: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -54,7 +72,13 @@ export default function VerifyPage() {
       .slice(0, 6);
 
     setOtp(value);
+    setError("");
+    setSuccess("");
   };
+
+  // ======================================================
+  // VERIFY OTP
+  // ======================================================
 
   const handleVerify = async (
     e: React.FormEvent<HTMLFormElement>
@@ -64,12 +88,20 @@ export default function VerifyPage() {
     setError("");
     setSuccess("");
 
+    // ----------------------------------------------------
+    // REGISTRATION SESSION CHECK
+    // ----------------------------------------------------
+
     if (!registrationId) {
       setError(
         "Registration session is missing. Please register again."
       );
       return;
     }
+
+    // ----------------------------------------------------
+    // OTP VALIDATION
+    // ----------------------------------------------------
 
     if (!/^\d{6}$/.test(otp)) {
       setError("Please enter the 6-digit OTP.");
@@ -79,6 +111,10 @@ export default function VerifyPage() {
     setLoading(true);
 
     try {
+      // --------------------------------------------------
+      // API REQUEST
+      // --------------------------------------------------
+
       const response = await fetch(
         `${API_URL}/api/auth/verify`,
         {
@@ -97,7 +133,24 @@ export default function VerifyPage() {
         }
       );
 
-      const data = await response.json();
+      // --------------------------------------------------
+      // READ RESPONSE SAFELY
+      // --------------------------------------------------
+
+      let data: {
+        message?: string;
+        [key: string]: unknown;
+      } = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      // --------------------------------------------------
+      // SERVER ERROR
+      // --------------------------------------------------
 
       if (!response.ok) {
         throw new Error(
@@ -105,9 +158,17 @@ export default function VerifyPage() {
         );
       }
 
+      // --------------------------------------------------
+      // SUCCESS
+      // --------------------------------------------------
+
       setSuccess(
         "Mobile verified successfully! Redirecting..."
       );
+
+      // --------------------------------------------------
+      // CLEAR REGISTRATION SESSION
+      // --------------------------------------------------
 
       sessionStorage.removeItem(
         "registrationId"
@@ -129,23 +190,42 @@ export default function VerifyPage() {
         "registrationGame"
       );
 
+      // --------------------------------------------------
+      // REDIRECT
+      // --------------------------------------------------
+
       setTimeout(() => {
         router.push("/profile");
       }, 800);
-
     } catch (error) {
       console.error(
         "OTP verification error:",
         error
       );
 
+      // --------------------------------------------------
+      // NETWORK / BACKEND CONNECTION ERROR
+      // --------------------------------------------------
+
       if (error instanceof TypeError) {
         setError(
-          "Cannot connect to backend. Make sure your backend is running."
+          "Cannot connect to the backend. Please try again."
         );
-      } else if (error instanceof Error) {
+      }
+
+      // --------------------------------------------------
+      // SERVER ERROR
+      // --------------------------------------------------
+
+      else if (error instanceof Error) {
         setError(error.message);
-      } else {
+      }
+
+      // --------------------------------------------------
+      // UNKNOWN ERROR
+      // --------------------------------------------------
+
+      else {
         setError(
           "Something went wrong. Please try again."
         );
@@ -155,26 +235,29 @@ export default function VerifyPage() {
     }
   };
 
+  // ======================================================
+  // UI
+  // ======================================================
+
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
 
-      {/* HEADER */}
+      {/* ==================================================
+          HEADER
+      ================================================== */}
 
       <header className="border-b border-[#e6e9f0] bg-white">
-
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
 
           <Link
             href="/"
             className="flex items-center gap-3"
           >
-
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4f46e5] text-lg shadow-sm">
               🎮
             </div>
 
             <div>
-
               <p className="text-[15px] font-extrabold tracking-tight text-[#172033]">
                 Tournament Arena
               </p>
@@ -182,9 +265,7 @@ export default function VerifyPage() {
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
                 Competitive Gaming
               </p>
-
             </div>
-
           </Link>
 
           <Link
@@ -195,23 +276,25 @@ export default function VerifyPage() {
           </Link>
 
         </div>
-
       </header>
 
-      {/* MAIN */}
+      {/* ==================================================
+          MAIN
+      ================================================== */}
 
       <div className="mx-auto flex min-h-[calc(100vh-72px)] max-w-7xl items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
 
         <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[#e2e6ee] bg-white shadow-[0_12px_40px_rgba(25,35,55,0.07)] lg:grid-cols-[280px_1fr]">
 
-          {/* SIDEBAR */}
+          {/* ==================================================
+              SIDEBAR
+          ================================================== */}
 
           <aside className="hidden bg-[#20264a] p-7 text-white lg:block">
 
             <div className="flex h-full flex-col">
 
               <div>
-
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a5b4fc]">
                   Almost there
                 </p>
@@ -227,10 +310,11 @@ export default function VerifyPage() {
                   Confirm your mobile number to complete
                   your registration.
                 </p>
-
               </div>
 
               <div className="mt-10 space-y-4">
+
+                {/* STEP 1 */}
 
                 <div className="flex gap-3">
 
@@ -252,6 +336,8 @@ export default function VerifyPage() {
 
                 <div className="ml-4 h-5 w-px bg-white/10" />
 
+                {/* STEP 2 */}
+
                 <div className="flex gap-3">
 
                   <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#6366f1] text-sm font-bold">
@@ -271,6 +357,8 @@ export default function VerifyPage() {
                 </div>
 
                 <div className="ml-4 h-5 w-px bg-white/10" />
+
+                {/* STEP 3 */}
 
                 <div className="flex gap-3">
 
@@ -306,10 +394,11 @@ export default function VerifyPage() {
               </div>
 
             </div>
-
           </aside>
 
-          {/* FORM */}
+          {/* ==================================================
+              FORM
+          ================================================== */}
 
           <section className="p-5 sm:p-8 lg:p-10">
 
@@ -362,7 +451,9 @@ export default function VerifyPage() {
 
             </div>
 
-            {/* ACCOUNT SUMMARY */}
+            {/* ==================================================
+                ACCOUNT SUMMARY
+            ================================================== */}
 
             <div className="mb-6 rounded-xl border border-[#e1e5ef] bg-[#f8f9fc] p-4">
 
@@ -395,7 +486,6 @@ export default function VerifyPage() {
               <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#e5e8ef] pt-4">
 
                 <div>
-
                   <p className="text-[10px] text-[#929bad]">
                     Username
                   </p>
@@ -403,11 +493,9 @@ export default function VerifyPage() {
                   <p className="mt-1 truncate text-xs font-semibold text-[#39445a]">
                     {username || "—"}
                   </p>
-
                 </div>
 
                 <div>
-
                   <p className="text-[10px] text-[#929bad]">
                     Game
                   </p>
@@ -415,14 +503,15 @@ export default function VerifyPage() {
                   <p className="mt-1 truncate text-xs font-semibold text-[#4f46e5]">
                     {game || "—"}
                   </p>
-
                 </div>
 
               </div>
 
             </div>
 
-            {/* OTP FORM */}
+            {/* ==================================================
+                OTP FORM
+            ================================================== */}
 
             <form
               onSubmit={handleVerify}
@@ -478,7 +567,9 @@ export default function VerifyPage() {
 
               </div>
 
-              {/* ERROR */}
+              {/* ==================================================
+                  ERROR
+              ================================================== */}
 
               {error && (
                 <div className="flex items-start gap-3 rounded-lg border border-[#fecaca] bg-[#fff5f5] px-3.5 py-3">
@@ -494,7 +585,9 @@ export default function VerifyPage() {
                 </div>
               )}
 
-              {/* SUCCESS */}
+              {/* ==================================================
+                  SUCCESS
+              ================================================== */}
 
               {success && (
                 <div className="flex items-start gap-3 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3.5 py-3">
@@ -510,7 +603,9 @@ export default function VerifyPage() {
                 </div>
               )}
 
-              {/* SUBMIT */}
+              {/* ==================================================
+                  SUBMIT
+              ================================================== */}
 
               <button
                 type="submit"
@@ -558,6 +653,10 @@ export default function VerifyPage() {
               </button>
 
             </form>
+
+            {/* ==================================================
+                BACK TO REGISTER
+            ================================================== */}
 
             <div className="mt-7 border-t border-[#edf0f4] pt-5 text-center">
 

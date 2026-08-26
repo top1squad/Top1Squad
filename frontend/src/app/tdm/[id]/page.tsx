@@ -6,6 +6,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
+
 import { useParams, useRouter } from "next/navigation";
 
 // ======================================================
@@ -16,6 +17,7 @@ const RAW_API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
 const API_URL = RAW_API_URL
+  .trim()
   .replace(/\/+$/, "")
   .replace(/\/api$/, "");
 
@@ -25,19 +27,26 @@ const API_URL = RAW_API_URL
 
 type Match = {
   _id: string;
+
   name?: string;
   title?: string;
   type?: string;
   mode?: string;
+
   game?: "BGMI" | "Free Fire" | string;
+
   prize?: number;
   entryFee?: number;
+
   date?: string;
   time?: string;
+
   maxTeams?: number;
   registeredTeams?: number;
+
   status?: string;
   map?: string;
+
   paymentQr?: string;
   qrCode?: string;
   upiQr?: string;
@@ -47,14 +56,18 @@ type Match = {
 type User = {
   _id?: string;
   id?: string;
+
   username?: string;
   name?: string;
   fullName?: string;
   email?: string;
+
   gameUid?: string;
+
   bgmiUid?: string;
   pubgUid?: string;
   pubgLevelId?: string;
+
   freeFireUid?: string;
   freefireUid?: string;
   freefireLevelId?: string;
@@ -70,6 +83,7 @@ type PlayerValidation = {
   checking: boolean;
   checked: boolean;
   valid: boolean;
+
   message: string;
   playerName: string;
   userId: string;
@@ -127,6 +141,7 @@ export default function TDMRegistrationPage() {
   const [loadingUser, setLoadingUser] = useState(true);
 
   const [teamName, setTeamName] = useState("");
+
   const [teamSlot] = useState<"A" | "B">("A");
 
   const [players, setPlayers] = useState<string[]>([
@@ -153,6 +168,7 @@ export default function TDMRegistrationPage() {
   const [utr, setUtr] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -216,7 +232,10 @@ export default function TDMRegistrationPage() {
         try {
           data = text ? JSON.parse(text) : {};
         } catch {
-          console.error("Invalid match response:", text);
+          console.error(
+            "Invalid match response:",
+            text
+          );
         }
 
         if (!response.ok) {
@@ -245,10 +264,14 @@ export default function TDMRegistrationPage() {
           setMatch(matchData);
         }
       } catch (err: any) {
-        console.error("Tournament load error:", err);
+        console.error(
+          "Tournament load error:",
+          err
+        );
 
         if (!cancelled) {
           setMatch(null);
+
           setError(
             err?.message ||
               "Unable to load tournament."
@@ -300,7 +323,10 @@ export default function TDMRegistrationPage() {
         try {
           data = text ? JSON.parse(text) : {};
         } catch {
-          console.error("Invalid user response:", text);
+          console.error(
+            "Invalid user response:",
+            text
+          );
         }
 
         if (!response.ok) {
@@ -340,12 +366,16 @@ export default function TDMRegistrationPage() {
               currentUser?.gameUid ||
               "";
 
-        const cleanUid = String(savedUid || "").trim();
+        const cleanUid = String(
+          savedUid || ""
+        ).trim();
 
         if (cleanUid) {
           setPlayers((old) => {
             const next = [...old];
+
             next[0] = cleanUid;
+
             return next.slice(0, 4);
           });
         } else {
@@ -354,10 +384,14 @@ export default function TDMRegistrationPage() {
           );
         }
       } catch (err: any) {
-        console.error("User load error:", err);
+        console.error(
+          "User load error:",
+          err
+        );
 
         if (!cancelled) {
           setUser(null);
+
           setError(
             err?.message ||
               "Please login before registering."
@@ -425,18 +459,23 @@ export default function TDMRegistrationPage() {
     const valid =
       data?.valid === true ||
       data?.success === true ||
-      data?.isValid === true ||
       Boolean(player && userId);
 
     return {
       valid,
+
       playerName: String(
         playerName || "Registered Player"
       ).trim(),
-      userId: String(userId || "").trim(),
+
+      userId: String(
+        userId || ""
+      ).trim(),
+
       gameUid: String(
         returnedUid || cleanUid
       ).trim(),
+
       message:
         data?.message ||
         data?.error ||
@@ -452,7 +491,9 @@ export default function TDMRegistrationPage() {
     index: number,
     uid: string
   ): Promise<boolean> => {
-    const cleanUid = String(uid || "").trim();
+    const cleanUid = String(
+      uid || ""
+    ).trim();
 
     if (!cleanUid) {
       setValidation((old) => {
@@ -460,8 +501,11 @@ export default function TDMRegistrationPage() {
 
         next[index] = {
           ...createEmptyValidation(),
+
           checked: true,
-          message: `${game} ID is required.`,
+
+          message:
+            `${game} ID is required.`,
         };
 
         return next;
@@ -469,7 +513,10 @@ export default function TDMRegistrationPage() {
 
       setValidatedPlayers((old) => {
         const next = [...old];
-        next[index] = createEmptyPlayer();
+
+        next[index] =
+          createEmptyPlayer();
+
         return next;
       });
 
@@ -482,8 +529,11 @@ export default function TDMRegistrationPage() {
 
         next[index] = {
           ...createEmptyValidation(),
+
           checked: true,
-          message: "Invalid tournament ID.",
+
+          message:
+            "Invalid tournament ID.",
         };
 
         return next;
@@ -510,30 +560,50 @@ export default function TDMRegistrationPage() {
     try {
       const query = new URLSearchParams();
 
-      query.set("tournamentId", tournamentId);
-      query.set("uid", cleanUid);
-      query.set("game", game);
+      query.set(
+        "tournamentId",
+        tournamentId
+      );
+
+      query.set(
+        "uid",
+        cleanUid
+      );
+
+      query.set(
+        "game",
+        game
+      );
 
       const url =
         `${API_URL}/api/squad-clash-tdm/registrations/validate-player-uid?${query.toString()}`;
 
-      const response = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        cache: "no-store",
-        headers: {
-          Accept: "application/json",
-        },
-      });
+      const response = await fetch(
+        url,
+        {
+          method: "GET",
+          credentials: "include",
+          cache: "no-store",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
 
-      const text = await response.text();
+      const text =
+        await response.text();
 
       let data: any = {};
 
       try {
-        data = text ? JSON.parse(text) : {};
+        data = text
+          ? JSON.parse(text)
+          : {};
       } catch {
-        console.error("Invalid validation response:", text);
+        console.error(
+          "Invalid validation response:",
+          text
+        );
       }
 
       if (!response.ok) {
@@ -555,18 +625,27 @@ export default function TDMRegistrationPage() {
         parsed.userId
       ) {
         const normalizedPlayer: Player = {
-          gameUid: parsed.gameUid,
+          gameUid:
+            parsed.gameUid,
+
           playerName:
             parsed.playerName ||
             "Registered Player",
-          user: parsed.userId,
+
+          user:
+            parsed.userId,
         };
 
-        setValidatedPlayers((old) => {
-          const next = [...old];
-          next[index] = normalizedPlayer;
-          return next;
-        });
+        setValidatedPlayers(
+          (old) => {
+            const next = [...old];
+
+            next[index] =
+              normalizedPlayer;
+
+            return next;
+          }
+        );
 
         setValidation((old) => {
           const next = [...old];
@@ -575,9 +654,13 @@ export default function TDMRegistrationPage() {
             checking: false,
             checked: true,
             valid: true,
-            message: "Player verified successfully.",
+
+            message:
+              "Player verified successfully.",
+
             playerName:
               normalizedPlayer.playerName,
+
             userId:
               normalizedPlayer.user,
           };
@@ -605,9 +688,11 @@ export default function TDMRegistrationPage() {
           checking: false,
           checked: true,
           valid: false,
+
           message:
             err?.message ||
             `${game} ID is not registered.`,
+
           playerName: "",
           userId: "",
         };
@@ -617,7 +702,10 @@ export default function TDMRegistrationPage() {
 
       setValidatedPlayers((old) => {
         const next = [...old];
-        next[index] = createEmptyPlayer();
+
+        next[index] =
+          createEmptyPlayer();
+
         return next;
       });
 
@@ -630,13 +718,21 @@ export default function TDMRegistrationPage() {
   // ====================================================
 
   useEffect(() => {
-    const uid = players[0]?.trim();
+    const uid =
+      players[0]?.trim();
 
-    if (!uid || !match || !tournamentId) {
+    if (
+      !uid ||
+      !match ||
+      !tournamentId
+    ) {
       return;
     }
 
-    validatePlayerUid(0, uid);
+    validatePlayerUid(
+      0,
+      uid
+    );
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -658,19 +754,27 @@ export default function TDMRegistrationPage() {
 
     setPlayers((old) => {
       const next = [...old];
+
       next[index] = value;
+
       return next.slice(0, 4);
     });
 
     setValidation((old) => {
       const next = [...old];
-      next[index] = createEmptyValidation();
+
+      next[index] =
+        createEmptyValidation();
+
       return next;
     });
 
     setValidatedPlayers((old) => {
       const next = [...old];
-      next[index] = createEmptyPlayer();
+
+      next[index] =
+        createEmptyPlayer();
+
       return next;
     });
 
@@ -691,29 +795,45 @@ export default function TDMRegistrationPage() {
       return false;
     }
 
-    return players.every((id, index) => {
-      const cleanId = String(id || "").trim();
-      const v = validation[index];
-      const p = validatedPlayers[index];
+    return players.every(
+      (id, index) => {
+        const cleanId =
+          String(id || "").trim();
 
-      return (
-        Boolean(cleanId) &&
-        v.checked &&
-        v.valid &&
-        Boolean(v.userId.trim()) &&
-        Boolean(p.gameUid.trim()) &&
-        Boolean(p.user.trim())
-      );
-    });
+        const v =
+          validation[index];
+
+        const p =
+          validatedPlayers[index];
+
+        return (
+          Boolean(cleanId) &&
+          v.checked &&
+          v.valid &&
+          Boolean(
+            v.userId.trim()
+          ) &&
+          Boolean(
+            p.gameUid.trim()
+          ) &&
+          Boolean(
+            p.user.trim()
+          )
+        );
+      }
+    );
   }, [
     players,
     validation,
     validatedPlayers,
   ]);
 
-  const verifiedCount = validation.filter(
-    (v) => v.checked && v.valid
-  ).length;
+  const verifiedCount =
+    validation.filter(
+      (v) =>
+        v.checked &&
+        v.valid
+    ).length;
 
   // ====================================================
   // SUBMIT
@@ -728,44 +848,69 @@ export default function TDMRegistrationPage() {
     setSuccess("");
 
     if (!match?._id) {
-      setError("Tournament information is missing.");
+      setError(
+        "Tournament information is missing."
+      );
+
       return;
     }
 
     if (!user) {
-      setError("Please login before registering.");
+      setError(
+        "Please login before registering."
+      );
+
       return;
     }
 
-    const cleanTeamName = teamName.trim();
+    const cleanTeamName =
+      teamName.trim();
 
-    if (cleanTeamName.length < 2) {
-      setError("Please enter a team name.");
+    if (
+      cleanTeamName.length < 2
+    ) {
+      setError(
+        "Please enter a team name."
+      );
+
       return;
     }
 
-    const cleanPlayers = players
-      .slice(0, 4)
-      .map((id) => String(id || "").trim());
+    const cleanPlayers =
+      players
+        .slice(0, 4)
+        .map((id) =>
+          String(id || "").trim()
+        );
 
     if (
       cleanPlayers.length !== 4 ||
-      cleanPlayers.some((id) => !id)
+      cleanPlayers.some(
+        (id) => !id
+      )
     ) {
-      setError(`Please enter all 4 ${game} IDs.`);
+      setError(
+        `Please enter all 4 ${game} IDs.`
+      );
+
       return;
     }
 
-    const uniqueIds = new Set(
-      cleanPlayers.map((id) =>
-        id.toLowerCase()
-      )
-    );
+    const uniqueIds =
+      new Set(
+        cleanPlayers.map(
+          (id) =>
+            id.toLowerCase()
+        )
+      );
 
-    if (uniqueIds.size !== 4) {
+    if (
+      uniqueIds.size !== 4
+    ) {
       setError(
         "Each player must have a different Game ID."
       );
+
       return;
     }
 
@@ -782,15 +927,21 @@ export default function TDMRegistrationPage() {
           user.gameUid ||
           "";
 
-    if (!String(savedUserUid).trim()) {
+    if (
+      !String(
+        savedUserUid
+      ).trim()
+    ) {
       setError(
         `Your ${game} ID is not saved in your profile.`
       );
+
       return;
     }
 
     if (
-      cleanPlayers[0].toLowerCase() !==
+      cleanPlayers[0]
+        .toLowerCase() !==
       String(savedUserUid)
         .trim()
         .toLowerCase()
@@ -798,6 +949,7 @@ export default function TDMRegistrationPage() {
       setError(
         `Player 1 must use your saved ${game} ID.`
       );
+
       return;
     }
 
@@ -805,15 +957,18 @@ export default function TDMRegistrationPage() {
       setError(
         `Please verify all 4 ${game} IDs first.`
       );
+
       return;
     }
 
-    const cleanUtr = utr.trim().toUpperCase();
+    const cleanUtr =
+      utr.trim().toUpperCase();
 
     if (!cleanUtr) {
       setError(
         "Please enter your payment UTR / transaction ID."
       );
+
       return;
     }
 
@@ -821,39 +976,64 @@ export default function TDMRegistrationPage() {
       cleanPlayers.map(
         (gameUid, index) => ({
           gameUid,
+
           playerName:
-            validatedPlayers[index]
-              .playerName.trim(),
+            validatedPlayers[
+              index
+            ].playerName.trim(),
+
           user:
-            validatedPlayers[index]
-              .user.trim(),
+            validatedPlayers[
+              index
+            ].user.trim(),
         })
       );
 
     const requestBody = {
-      tournamentId: match._id,
+      tournamentId:
+        match._id,
+
       teamSlot,
-      teamName: cleanTeamName,
-      leaderGameUid: cleanPlayers[0],
-      players: playerObjects,
-      utr: cleanUtr,
+
+      teamName:
+        cleanTeamName,
+
+      leaderGameUid:
+        cleanPlayers[0],
+
+      players:
+        playerObjects,
+
+      utr:
+        cleanUtr,
     };
 
     try {
       setSubmitting(true);
 
-      const response = await fetch(
-        `${API_URL}/api/squad-clash-tdm/registrations`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify(requestBody),
-        }
-      );
+      const response =
+        await fetch(
+          `${API_URL}/api/squad-clash-tdm/registrations`,
+          {
+            method: "POST",
+
+            credentials:
+              "include",
+
+            headers: {
+              "Content-Type":
+                "application/json",
+
+              Accept:
+                "application/json",
+            },
+
+            body:
+              JSON.stringify(
+                requestBody
+              ),
+          }
+        );
 
       const responseText =
         await response.text();
@@ -861,9 +1041,12 @@ export default function TDMRegistrationPage() {
       let data: any = {};
 
       try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : {};
+        data =
+          responseText
+            ? JSON.parse(
+                responseText
+              )
+            : {};
       } catch {
         console.error(
           "Invalid registration response:",
@@ -885,7 +1068,10 @@ export default function TDMRegistrationPage() {
       );
 
       setTimeout(() => {
-        router.push("/my-tournaments");
+        router.push(
+          "/my-tournaments"
+        );
+
         router.refresh();
       }, 1200);
     } catch (err: any) {
@@ -907,7 +1093,10 @@ export default function TDMRegistrationPage() {
   // LOADING
   // ====================================================
 
-  if (loadingMatch || loadingUser) {
+  if (
+    loadingMatch ||
+    loadingUser
+  ) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-black px-5 text-white">
         <div className="text-center">
@@ -944,7 +1133,9 @@ export default function TDMRegistrationPage() {
 
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() =>
+              router.back()
+            }
             className="mt-6 w-full rounded-xl bg-white px-4 py-3 text-sm font-bold text-black"
           >
             Go Back
@@ -962,14 +1153,14 @@ export default function TDMRegistrationPage() {
     <main className="min-h-screen bg-black text-white">
       <div className="mx-auto w-full max-w-2xl px-4 pb-12 pt-4 sm:px-6 sm:pt-8">
 
-        {/* ==================================================
-            TOP BAR
-        ================================================== */}
+        {/* TOP BAR */}
 
         <div className="mb-6 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => router.back()}
+            onClick={() =>
+              router.back()
+            }
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-800 bg-[#151515] text-lg text-gray-300"
           >
             ←
@@ -986,17 +1177,13 @@ export default function TDMRegistrationPage() {
           </div>
         </div>
 
-        {/* ==================================================
-            TOURNAMENT HERO
-        ================================================== */}
+        {/* TOURNAMENT HERO */}
 
         <section className="relative overflow-hidden rounded-3xl border border-gray-800 bg-gradient-to-br from-[#21170e] via-[#151515] to-[#101010] p-5 sm:p-6">
-
           <div className="absolute -right-16 -top-16 h-40 w-40 rounded-full bg-orange-500/10 blur-3xl" />
 
           <div className="relative">
             <div className="flex items-start justify-between gap-4">
-
               <div className="min-w-0">
                 <span className="inline-flex rounded-lg bg-orange-500/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-orange-500">
                   {game} • TDM
@@ -1019,66 +1206,84 @@ export default function TDMRegistrationPage() {
                 <p className="mt-1 text-2xl font-black text-orange-500">
                   ₹
                   {Number(
-                    match.entryFee || 0
-                  ).toLocaleString("en-IN")}
+                    match.entryFee ||
+                      0
+                  ).toLocaleString(
+                    "en-IN"
+                  )}
                 </p>
               </div>
             </div>
 
             <div className="mt-6 grid grid-cols-3 gap-2">
-
               <MiniInfo
                 label="Prize"
                 value={`₹${Number(
                   match.prize || 0
-                ).toLocaleString("en-IN")}`}
+                ).toLocaleString(
+                  "en-IN"
+                )}`}
               />
 
               <MiniInfo
                 label="Date"
-                value={formatDate(match.date)}
+                value={formatDate(
+                  match.date
+                )}
               />
 
               <MiniInfo
                 label="Time"
-                value={match.time || "--"}
+                value={
+                  match.time ||
+                  "--"
+                }
               />
-
             </div>
           </div>
         </section>
 
-        {/* ==================================================
-            PROGRESS
-        ================================================== */}
+        {/* PROGRESS */}
 
         <div className="my-6 flex items-center gap-2">
-
-          <Step active number="1" label="Team" />
-          <div className="h-px flex-1 bg-gray-800" />
           <Step
-            active={Boolean(teamName.trim())}
+            active
+            number="1"
+            label="Team"
+          />
+
+          <div className="h-px flex-1 bg-gray-800" />
+
+          <Step
+            active={Boolean(
+              teamName.trim()
+            )}
             number="2"
             label="Players"
           />
+
           <div className="h-px flex-1 bg-gray-800" />
+
           <Step
-            active={allPlayersValid}
+            active={
+              allPlayersValid
+            }
             number="3"
             label="Verify"
           />
+
           <div className="h-px flex-1 bg-gray-800" />
+
           <Step
-            active={Boolean(utr.trim())}
+            active={Boolean(
+              utr.trim()
+            )}
             number="4"
             label="Pay"
           />
-
         </div>
 
-        {/* ==================================================
-            ERROR
-        ================================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="mb-5 flex gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
@@ -1092,9 +1297,7 @@ export default function TDMRegistrationPage() {
           </div>
         )}
 
-        {/* ==================================================
-            SUCCESS
-        ================================================== */}
+        {/* SUCCESS */}
 
         {success && (
           <div className="mb-5 rounded-2xl border border-green-500/20 bg-green-500/10 p-4">
@@ -1108,21 +1311,18 @@ export default function TDMRegistrationPage() {
           </div>
         )}
 
-        {/* ==================================================
-            FORM
-        ================================================== */}
+        {/* FORM */}
 
         <form
-          onSubmit={handleSubmit}
+          onSubmit={
+            handleSubmit
+          }
           className="space-y-5"
         >
 
-          {/* ==================================================
-              TEAM
-          ================================================== */}
+          {/* TEAM */}
 
           <section className="rounded-3xl border border-gray-800 bg-[#151515] p-5 sm:p-6">
-
             <SectionTitle
               number="01"
               title="Create your team"
@@ -1138,7 +1338,9 @@ export default function TDMRegistrationPage() {
                 type="text"
                 value={teamName}
                 onChange={(e) =>
-                  setTeamName(e.target.value)
+                  setTeamName(
+                    e.target.value
+                  )
                 }
                 placeholder="e.g. Team Phoenix"
                 maxLength={50}
@@ -1147,8 +1349,13 @@ export default function TDMRegistrationPage() {
               />
 
               <div className="mt-2 flex justify-between text-[11px] text-gray-600">
-                <span>Minimum 2 characters</span>
-                <span>{teamName.length}/50</span>
+                <span>
+                  Minimum 2 characters
+                </span>
+
+                <span>
+                  {teamName.length}/50
+                </span>
               </div>
             </div>
 
@@ -1169,14 +1376,10 @@ export default function TDMRegistrationPage() {
             </div>
           </section>
 
-          {/* ==================================================
-              PLAYERS
-          ================================================== */}
+          {/* PLAYERS */}
 
           <section className="rounded-3xl border border-gray-800 bg-[#151515] p-5 sm:p-6">
-
             <div className="flex items-start justify-between gap-4">
-
               <SectionTitle
                 number="02"
                 title="Add your squad"
@@ -1186,18 +1389,22 @@ export default function TDMRegistrationPage() {
               <div className="shrink-0 rounded-full bg-gray-900 px-3 py-1 text-xs font-bold text-gray-400">
                 {verifiedCount}/4
               </div>
-
             </div>
 
             <div className="mt-6 space-y-3">
-
-              {Array.from({ length: 4 }).map(
+              {Array.from({
+                length: 4,
+              }).map(
                 (_, index) => {
                   const item =
-                    validation[index];
+                    validation[
+                      index
+                    ];
 
                   const playerInfo =
-                    validatedPlayers[index];
+                    validatedPlayers[
+                      index
+                    ];
 
                   const isLeader =
                     index === 0;
@@ -1217,9 +1424,7 @@ export default function TDMRegistrationPage() {
                       {/* PLAYER TOP */}
 
                       <div className="mb-3 flex items-center justify-between">
-
                         <div className="flex items-center gap-3">
-
                           <div
                             className={`flex h-9 w-9 items-center justify-center rounded-full text-sm font-black ${
                               isLeader
@@ -1233,6 +1438,7 @@ export default function TDMRegistrationPage() {
                           <div>
                             <p className="text-sm font-bold">
                               Player {index + 1}
+
                               {isLeader && (
                                 <span className="ml-2 text-[10px] font-bold uppercase text-orange-500">
                                   Leader
@@ -1246,7 +1452,6 @@ export default function TDMRegistrationPage() {
                                 : "Team member"}
                             </p>
                           </div>
-
                         </div>
 
                         {item.checking && (
@@ -1258,7 +1463,10 @@ export default function TDMRegistrationPage() {
                         {!item.checking &&
                           item.valid && (
                             <span className="flex items-center gap-1 text-[10px] font-bold text-green-500">
-                              <span>✓</span>
+                              <span>
+                                ✓
+                              </span>
+
                               VERIFIED
                             </span>
                           )}
@@ -1270,17 +1478,17 @@ export default function TDMRegistrationPage() {
                               INVALID
                             </span>
                           )}
-
                       </div>
 
                       {/* INPUT */}
 
                       <div className="relative">
-
                         <input
                           type="text"
                           value={
-                            players[index] || ""
+                            players[
+                              index
+                            ] || ""
                           }
                           onChange={(e) =>
                             updatePlayer(
@@ -1289,12 +1497,20 @@ export default function TDMRegistrationPage() {
                             )
                           }
                           onBlur={() => {
-                            if (index === 0) return;
+                            if (
+                              index === 0
+                            ) {
+                              return;
+                            }
 
                             const value =
-                              players[index] || "";
+                              players[
+                                index
+                              ] || "";
 
-                            if (value.trim()) {
+                            if (
+                              value.trim()
+                            ) {
                               validatePlayerUid(
                                 index,
                                 value
@@ -1303,7 +1519,9 @@ export default function TDMRegistrationPage() {
                           }}
                           disabled={
                             isLeader &&
-                            Boolean(players[0])
+                            Boolean(
+                              players[0]
+                            )
                           }
                           placeholder={
                             isLeader
@@ -1347,7 +1565,6 @@ export default function TDMRegistrationPage() {
                               ×
                             </span>
                           )}
-
                       </div>
 
                       {/* VERIFIED PLAYER */}
@@ -1355,7 +1572,6 @@ export default function TDMRegistrationPage() {
                       {item.valid &&
                         playerInfo.playerName && (
                           <div className="mt-3 flex items-center gap-3 rounded-xl bg-green-500/5 px-3 py-2.5">
-
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/10 text-green-500">
                               ✓
                             </div>
@@ -1371,7 +1587,6 @@ export default function TDMRegistrationPage() {
                                 }
                               </p>
                             </div>
-
                           </div>
                         )}
 
@@ -1384,12 +1599,10 @@ export default function TDMRegistrationPage() {
                               "This Game ID could not be verified."}
                           </p>
                         )}
-
                     </div>
                   );
                 }
               )}
-
             </div>
 
             {/* VERIFICATION */}
@@ -1401,9 +1614,7 @@ export default function TDMRegistrationPage() {
                   : "bg-gray-900/60"
               }`}
             >
-
               <div className="flex items-center justify-between">
-
                 <div>
                   <p className="text-sm font-bold">
                     Squad verification
@@ -1423,7 +1634,6 @@ export default function TDMRegistrationPage() {
                 >
                   {verifiedCount}/4
                 </div>
-
               </div>
 
               <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-800">
@@ -1434,16 +1644,12 @@ export default function TDMRegistrationPage() {
                   }}
                 />
               </div>
-
             </div>
           </section>
 
-          {/* ==================================================
-              PAYMENT
-          ================================================== */}
+          {/* PAYMENT */}
 
           <section className="rounded-3xl border border-gray-800 bg-[#151515] p-5 sm:p-6">
-
             <SectionTitle
               number="03"
               title="Complete payment"
@@ -1453,7 +1659,6 @@ export default function TDMRegistrationPage() {
             {/* FEE */}
 
             <div className="mt-5 flex items-center justify-between rounded-2xl bg-orange-500/10 p-4">
-
               <div>
                 <p className="text-xs text-gray-500">
                   Entry fee
@@ -1462,8 +1667,11 @@ export default function TDMRegistrationPage() {
                 <p className="mt-1 text-2xl font-black text-orange-500">
                   ₹
                   {Number(
-                    match.entryFee || 0
-                  ).toLocaleString("en-IN")}
+                    match.entryFee ||
+                      0
+                  ).toLocaleString(
+                    "en-IN"
+                  )}
                 </p>
               </div>
 
@@ -1475,17 +1683,18 @@ export default function TDMRegistrationPage() {
                 <p className="mt-1 font-bold text-white">
                   ₹
                   {Number(
-                    match.prize || 0
-                  ).toLocaleString("en-IN")}
+                    match.prize ||
+                      0
+                  ).toLocaleString(
+                    "en-IN"
+                  )}
                 </p>
               </div>
-
             </div>
 
             {/* QR */}
 
             <div className="mt-5 rounded-2xl border border-gray-800 bg-black p-5">
-
               <div className="text-center">
                 <p className="font-bold">
                   Scan to pay
@@ -1503,13 +1712,11 @@ export default function TDMRegistrationPage() {
                   className="h-52 w-52 object-contain sm:h-64 sm:w-64"
                 />
               </div>
-
             </div>
 
             {/* UTR */}
 
             <div className="mt-5">
-
               <label className="mb-2 block text-sm font-semibold">
                 UTR / Transaction ID
               </label>
@@ -1518,7 +1725,9 @@ export default function TDMRegistrationPage() {
                 type="text"
                 value={utr}
                 onChange={(e) =>
-                  setUtr(e.target.value)
+                  setUtr(
+                    e.target.value
+                  )
                 }
                 placeholder="Enter UTR after payment"
                 className="w-full rounded-2xl border border-gray-700 bg-black px-4 py-4 text-sm uppercase text-white outline-none placeholder:text-gray-700 focus:border-orange-500"
@@ -1526,25 +1735,19 @@ export default function TDMRegistrationPage() {
               />
 
               <p className="mt-2 text-[11px] leading-5 text-gray-600">
-                You can find the UTR in your UPI
-                payment history.
+                You can find the UTR in your UPI payment history.
               </p>
-
             </div>
           </section>
 
-          {/* ==================================================
-              FINAL SUMMARY
-          ================================================== */}
+          {/* FINAL SUMMARY */}
 
           <section className="rounded-3xl border border-gray-800 bg-[#151515] p-5">
-
             <p className="text-xs font-bold uppercase tracking-wider text-gray-500">
               Ready to register?
             </p>
 
             <div className="mt-4 space-y-3">
-
               <SummaryRow
                 label="Team"
                 value={
@@ -1559,7 +1762,9 @@ export default function TDMRegistrationPage() {
               <SummaryRow
                 label="Players"
                 value={`${verifiedCount}/4 verified`}
-                good={allPlayersValid}
+                good={
+                  allPlayersValid
+                }
               />
 
               <SummaryRow
@@ -1573,14 +1778,10 @@ export default function TDMRegistrationPage() {
                   utr.trim()
                 )}
               />
-
             </div>
-
           </section>
 
-          {/* ==================================================
-              SUBMIT
-          ================================================== */}
+          {/* SUBMIT */}
 
           <button
             type="submit"
@@ -1602,7 +1803,6 @@ export default function TDMRegistrationPage() {
             player IDs belong to the respective
             registered users.
           </p>
-
         </form>
       </div>
     </main>
@@ -1662,7 +1862,6 @@ function SectionTitle({
 }) {
   return (
     <div className="flex gap-3">
-
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-orange-500/10 text-[10px] font-black text-orange-500">
         {number}
       </div>
@@ -1676,7 +1875,6 @@ function SectionTitle({
           {subtitle}
         </p>
       </div>
-
     </div>
   );
 }
@@ -1720,7 +1918,6 @@ function SummaryRow({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-gray-800 pb-3 last:border-0 last:pb-0">
-
       <span className="text-sm text-gray-500">
         {label}
       </span>
@@ -1733,9 +1930,9 @@ function SummaryRow({
         }`}
       >
         {good && "✓"}
+
         {value}
       </span>
-
     </div>
   );
 }
@@ -1744,14 +1941,21 @@ function SummaryRow({
 // DATE
 // ======================================================
 
-function formatDate(value?: string): string {
+function formatDate(
+  value?: string
+): string {
   if (!value) {
     return "--";
   }
 
-  const date = new Date(value);
+  const date =
+    new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return value;
   }
 

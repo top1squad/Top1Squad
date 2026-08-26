@@ -21,6 +21,8 @@ type User = {
   bgmiUid: string;
   freeFireUid: string;
 
+  upiId: string;
+
   role: "user" | "admin";
 };
 
@@ -28,9 +30,10 @@ type User = {
 // API
 // ======================================================
 
-const API_URL =
+const API_URL = (
   process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001";
+  "http://localhost:5001"
+).replace(/\/$/, "");
 
 // ======================================================
 // SETTINGS PAGE
@@ -41,29 +44,67 @@ export default function SettingsPage() {
 
   const [loading, setLoading] = useState(true);
 
-  // Account
+  // ====================================================
+  // ACCOUNT
+  // ====================================================
+
   const [fullName, setFullName] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
+  const [upiId, setUpiId] = useState("");
 
-  // Game IDs
+  // ====================================================
+  // GAME IDS
+  // ====================================================
+
   const [bgmiUid, setBgmiUid] = useState("");
   const [freeFireUid, setFreeFireUid] = useState("");
 
-  // Preferences
-  const [notifications, setNotifications] = useState(true);
+  // ====================================================
+  // PREFERENCES
+  // ====================================================
 
-  // Saving states
-  const [savingProfile, setSavingProfile] = useState(false);
+  const [notifications, setNotifications] =
+    useState(true);
+
+  // ====================================================
+  // SAVING STATES
+  // ====================================================
+
+  const [savingProfile, setSavingProfile] =
+    useState(false);
 
   const [savingGame, setSavingGame] = useState<
     "BGMI" | "Free Fire" | null
   >(null);
 
-  // Messages
+  // ====================================================
+  // MESSAGES
+  // ====================================================
+
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+
+  // ====================================================
+  // SAFE JSON RESPONSE
+  // ====================================================
+
+  async function parseResponse(response: Response) {
+    const text = await response.text();
+
+    if (!text) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw new Error(
+        "Backend returned an invalid response."
+      );
+    }
+  }
 
   // ====================================================
   // LOAD USER
@@ -84,11 +125,19 @@ export default function SettingsPage() {
         {
           method: "GET",
           credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
           cache: "no-store",
         }
       );
 
-      const data = await response.json();
+      const data = await parseResponse(response);
+
+      console.log("AUTH ME RESPONSE:", {
+        status: response.status,
+        data,
+      });
 
       if (!response.ok) {
         throw new Error(
@@ -104,16 +153,60 @@ export default function SettingsPage() {
         throw new Error("Please login first");
       }
 
-      const currentUser: User = data.user;
+      const currentUser: User = {
+        ...data.user,
+        id:
+          data.user.id ||
+          data.user._id ||
+          "",
+        username:
+          data.user.username || "",
+        fullName:
+          data.user.fullName || "",
+        email:
+          data.user.email || "",
+        mobile:
+          data.user.mobile || "",
+        game:
+          data.user.game || "BGMI",
+        gameUid:
+          data.user.gameUid || "",
+        bgmiUid:
+          data.user.bgmiUid || "",
+        freeFireUid:
+          data.user.freeFireUid || "",
+        upiId:
+          data.user.upiId || "",
+        role:
+          data.user.role || "user",
+      };
 
       setUser(currentUser);
 
-      setFullName(currentUser.fullName || "");
-      setUsername(currentUser.username || "");
-      setEmail(currentUser.email || "");
-      setMobile(currentUser.mobile || "");
+      setFullName(
+        currentUser.fullName || ""
+      );
 
-      setBgmiUid(currentUser.bgmiUid || "");
+      setUsername(
+        currentUser.username || ""
+      );
+
+      setEmail(
+        currentUser.email || ""
+      );
+
+      setMobile(
+        currentUser.mobile || ""
+      );
+
+      setUpiId(
+        currentUser.upiId || ""
+      );
+
+      setBgmiUid(
+        currentUser.bgmiUid || ""
+      );
+
       setFreeFireUid(
         currentUser.freeFireUid || ""
       );
@@ -143,23 +236,69 @@ export default function SettingsPage() {
       setMessage("");
       setError("");
 
+      const cleanFullName =
+        fullName.trim();
+
+      const cleanUsername =
+        username.trim();
+
+      const cleanEmail =
+        email.trim();
+
+      const cleanUpiId =
+        upiId.trim();
+
+      if (!cleanFullName) {
+        throw new Error(
+          "Full name cannot be empty."
+        );
+      }
+
+      if (!cleanUsername) {
+        throw new Error(
+          "Username cannot be empty."
+        );
+      }
+
+      if (!cleanEmail) {
+        throw new Error(
+          "Email address cannot be empty."
+        );
+      }
+
       const response = await fetch(
         `${API_URL}/api/auth/profile`,
         {
           method: "PATCH",
           credentials: "include",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify({
-            fullName,
-            username,
-            email,
+            fullName:
+              cleanFullName,
+            username:
+              cleanUsername,
+            email:
+              cleanEmail,
+            upiId:
+              cleanUpiId,
           }),
         }
       );
 
-      const data = await response.json();
+      const data =
+        await parseResponse(response);
+
+      console.log(
+        "PROFILE UPDATE RESPONSE:",
+        {
+          status: response.status,
+          data,
+        }
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -168,22 +307,82 @@ export default function SettingsPage() {
         );
       }
 
-      setUser(data.user);
+      if (!data.user) {
+        throw new Error(
+          "Profile updated but backend did not return user data."
+        );
+      }
+
+      const updatedUser: User = {
+        ...data.user,
+        id:
+          data.user.id ||
+          data.user._id ||
+          user?.id ||
+          "",
+        username:
+          data.user.username ||
+          cleanUsername,
+        fullName:
+          data.user.fullName ||
+          cleanFullName,
+        email:
+          data.user.email ||
+          cleanEmail,
+        mobile:
+          data.user.mobile ||
+          mobile,
+        game:
+          data.user.game ||
+          user?.game ||
+          "BGMI",
+        gameUid:
+          data.user.gameUid ||
+          user?.gameUid ||
+          "",
+        bgmiUid:
+          data.user.bgmiUid ||
+          bgmiUid,
+        freeFireUid:
+          data.user.freeFireUid ||
+          freeFireUid,
+        upiId:
+          data.user.upiId ??
+          cleanUpiId,
+        role:
+          data.user.role ||
+          user?.role ||
+          "user",
+      };
+
+      setUser(updatedUser);
 
       setFullName(
-        data.user.fullName || ""
+        updatedUser.fullName || ""
       );
 
       setUsername(
-        data.user.username || ""
+        updatedUser.username || ""
       );
 
       setEmail(
-        data.user.email || ""
+        updatedUser.email || ""
       );
 
       setMobile(
-        data.user.mobile || mobile
+        updatedUser.mobile || ""
+      );
+
+      setUpiId(
+        updatedUser.upiId || ""
+      );
+
+      setBgmiUid(
+        updatedUser.bgmiUid || ""
+      );
+
+      setFreeFireUid(
+        updatedUser.freeFireUid || ""
       );
 
       setMessage(
@@ -238,7 +437,9 @@ export default function SettingsPage() {
           method: "PATCH",
           credentials: "include",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
+            Accept: "application/json",
           },
           body: JSON.stringify({
             game,
@@ -247,7 +448,16 @@ export default function SettingsPage() {
         }
       );
 
-      const data = await response.json();
+      const data =
+        await parseResponse(response);
+
+      console.log(
+        "GAME UID UPDATE RESPONSE:",
+        {
+          status: response.status,
+          data,
+        }
+      );
 
       if (!response.ok) {
         throw new Error(
@@ -256,7 +466,56 @@ export default function SettingsPage() {
         );
       }
 
-      const updatedUser: User = data.user;
+      if (!data.user) {
+        throw new Error(
+          "Game UID updated but backend did not return user data."
+        );
+      }
+
+      const updatedUser: User = {
+        ...data.user,
+        id:
+          data.user.id ||
+          data.user._id ||
+          user?.id ||
+          "",
+        username:
+          data.user.username ||
+          username,
+        fullName:
+          data.user.fullName ||
+          fullName,
+        email:
+          data.user.email ||
+          email,
+        mobile:
+          data.user.mobile ||
+          mobile,
+        game:
+          data.user.game ||
+          user?.game ||
+          game,
+        gameUid:
+          data.user.gameUid ||
+          uid,
+        bgmiUid:
+          data.user.bgmiUid ||
+          (game === "BGMI"
+            ? uid
+            : bgmiUid),
+        freeFireUid:
+          data.user.freeFireUid ||
+          (game === "Free Fire"
+            ? uid
+            : freeFireUid),
+        upiId:
+          data.user.upiId ??
+          upiId,
+        role:
+          data.user.role ||
+          user?.role ||
+          "user",
+      };
 
       setUser(updatedUser);
 
@@ -266,6 +525,10 @@ export default function SettingsPage() {
 
       setFreeFireUid(
         updatedUser.freeFireUid || ""
+      );
+
+      setUpiId(
+        updatedUser.upiId || ""
       );
 
       setMobile(
@@ -305,14 +568,19 @@ export default function SettingsPage() {
         {
           method: "POST",
           credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
         }
       );
 
-      const data = await response.json();
+      const data =
+        await parseResponse(response);
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Logout failed"
+          data.message ||
+            "Logout failed"
         );
       }
 
@@ -398,7 +666,9 @@ export default function SettingsPage() {
   }
 
   const initial =
-    user.fullName?.charAt(0)?.toUpperCase() ||
+    user.fullName
+      ?.charAt(0)
+      ?.toUpperCase() ||
     "U";
 
   return (
@@ -540,17 +810,22 @@ export default function SettingsPage() {
 
                 <SummaryRow
                   label="Email"
-                  value={user.email}
+                  value={user.email || "Not set"}
                 />
 
                 <SummaryRow
                   label="Mobile"
-                  value={user.mobile}
+                  value={user.mobile || "Not set"}
                 />
 
                 <SummaryRow
                   label="Game"
-                  value={user.game}
+                  value={user.game || "Not set"}
+                />
+
+                <SummaryRow
+                  label="UPI ID"
+                  value={user.upiId || "Not set"}
                 />
 
                 <SummaryRow
@@ -635,6 +910,32 @@ export default function SettingsPage() {
 
                   <p className="mt-1.5 text-[9px] text-[#a0a6b3]">
                     Mobile number cannot be changed.
+                  </p>
+
+                </div>
+
+                {/* UPI ID */}
+
+                <div className="sm:col-span-2">
+
+                  <label className="text-[10px] font-bold text-[#4d5668]">
+                    UPI ID
+                  </label>
+
+                  <input
+                    type="text"
+                    value={upiId}
+                    onChange={(e) =>
+                      setUpiId(e.target.value)
+                    }
+                    placeholder="example@upi"
+                    autoComplete="off"
+                    className="mt-2 w-full rounded-xl border border-[#dfe3e9] bg-white px-4 py-3 text-xs font-semibold text-[#30394c] outline-none transition placeholder:text-[#b1b6c0] focus:border-[#4f46e5] focus:ring-3 focus:ring-[#4f46e5]/10"
+                  />
+
+                  <p className="mt-1.5 text-[9px] text-[#a0a6b3]">
+                    Add your UPI ID to receive tournament
+                    winnings and payments.
                   </p>
 
                 </div>
@@ -944,7 +1245,8 @@ function GameAccountCard({
   onSave: () => void;
   color: "indigo" | "orange";
 }) {
-  const isIndigo = color === "indigo";
+  const isIndigo =
+    color === "indigo";
 
   return (
     <div
@@ -966,7 +1268,9 @@ function GameAccountCard({
                 : "bg-[#fff0e7] text-[#ea580c]"
             }`}
           >
-            {isIndigo ? "B" : "F"}
+            {isIndigo
+              ? "B"
+              : "F"}
           </div>
 
           <div>
@@ -1004,6 +1308,7 @@ function GameAccountCard({
             setUid(e.target.value)
           }
           placeholder={`Enter ${game} UID`}
+          autoComplete="off"
           className="mt-2 w-full rounded-xl border border-[#dfe3e9] bg-white px-4 py-3 text-xs font-semibold text-[#30394c] outline-none transition placeholder:text-[#b1b6c0] focus:border-[#4f46e5] focus:ring-3 focus:ring-[#4f46e5]/10"
         />
 

@@ -24,12 +24,11 @@ type ProfileStats = {
 };
 
 /* ============================================================
-   API
+   API CONFIG
 ============================================================ */
 
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001";
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
 /* ============================================================
    PROFILE PAGE
@@ -56,7 +55,9 @@ export default function ProfilePage() {
         setLoading(true);
         setError("");
 
-        /* CURRENT USER */
+        /* ====================================================
+           CURRENT USER
+        ==================================================== */
 
         const userResponse = await fetch(
           `${API_URL}/api/auth/me`,
@@ -73,8 +74,7 @@ export default function ProfilePage() {
 
         if (!userResponse.ok) {
           throw new Error(
-            userData.message ||
-              "Unable to load profile"
+            userData.message || "Unable to load profile"
           );
         }
 
@@ -83,14 +83,14 @@ export default function ProfilePage() {
           !userData.authenticated ||
           !userData.user
         ) {
-          throw new Error(
-            "You are not logged in"
-          );
+          throw new Error("You are not logged in");
         }
 
         setUser(userData.user);
 
-        /* PROFILE STATISTICS */
+        /* ====================================================
+           PROFILE STATISTICS
+        ==================================================== */
 
         const statsResponse = await fetch(
           `${API_URL}/api/profile/stats`,
@@ -103,31 +103,33 @@ export default function ProfilePage() {
           }
         );
 
-        const statsData =
-          await statsResponse.json();
+        const statsData = await statsResponse.json();
 
         if (!statsResponse.ok) {
           throw new Error(
-            statsData.message ||
-              "Unable to load statistics"
+            statsData.message || "Unable to load statistics"
           );
         }
 
-        if (statsData.success) {
-          setStats(statsData.stats);
+        if (statsData.success && statsData.stats) {
+          setStats({
+            tournamentsJoined:
+              Number(statsData.stats.tournamentsJoined) || 0,
+            tournamentsWon:
+              Number(statsData.stats.tournamentsWon) || 0,
+          });
         }
       } catch (err) {
-        console.error(
-          "Profile error:",
-          err
-        );
+        console.error("Profile error:", err);
 
-        if (err instanceof Error) {
+        if (err instanceof TypeError) {
+          setError(
+            "Cannot connect to backend. Please check your backend URL."
+          );
+        } else if (err instanceof Error) {
           setError(err.message);
         } else {
-          setError(
-            "Something went wrong"
-          );
+          setError("Something went wrong.");
         }
       } finally {
         setLoading(false);
@@ -144,11 +146,8 @@ export default function ProfilePage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-[#f7f8fb] px-4 py-10 text-[#20283a] sm:px-6 lg:px-8">
-
         <div className="mx-auto max-w-[1200px]">
-
           <div className="animate-pulse">
-
             <div className="h-4 w-24 rounded bg-[#e5e8ee]" />
 
             <div className="mt-8 h-9 w-52 rounded bg-[#e5e8ee]" />
@@ -158,17 +157,11 @@ export default function ProfilePage() {
             <div className="mt-8 h-56 rounded-2xl bg-white ring-1 ring-[#e3e6ed]" />
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
-
               <div className="h-48 rounded-2xl bg-white ring-1 ring-[#e3e6ed]" />
-
               <div className="h-48 rounded-2xl bg-white ring-1 ring-[#e3e6ed]" />
-
             </div>
-
           </div>
-
         </div>
-
       </main>
     );
   }
@@ -180,9 +173,7 @@ export default function ProfilePage() {
   if (error || !user) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#f7f8fb] px-5 text-[#20283a]">
-
         <div className="w-full max-w-md rounded-2xl border border-[#e2e5eb] bg-white p-8 text-center shadow-sm">
-
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-[#eef0ff] text-sm font-black text-[#4f46e5]">
             !
           </div>
@@ -192,8 +183,7 @@ export default function ProfilePage() {
           </h1>
 
           <p className="mt-2 text-sm leading-6 text-[#8b93a4]">
-            {error ||
-              "Please login to view your profile."}
+            {error || "Please login to view your profile."}
           </p>
 
           <Link
@@ -202,9 +192,7 @@ export default function ProfilePage() {
           >
             Go to login →
           </Link>
-
         </div>
-
       </main>
     );
   }
@@ -214,9 +202,7 @@ export default function ProfilePage() {
   ========================================================== */
 
   const avatarLetter =
-    user.fullName
-      ?.charAt(0)
-      ?.toUpperCase() || "U";
+    user.fullName?.charAt(0)?.toUpperCase() || "U";
 
   const winRate =
     stats.tournamentsJoined > 0
@@ -241,7 +227,6 @@ export default function ProfilePage() {
       ====================================================== */}
 
       <section className="border-b border-[#e4e7ed] bg-white">
-
         <div className="mx-auto max-w-[1200px] px-4 py-7 sm:px-6 lg:px-8">
 
           <Link
@@ -252,7 +237,6 @@ export default function ProfilePage() {
           </Link>
 
           <div className="mt-6">
-
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#4f46e5]">
               Account
             </p>
@@ -265,11 +249,8 @@ export default function ProfilePage() {
               Manage your player identity, gaming account
               and competitive activity.
             </p>
-
           </div>
-
         </div>
-
       </section>
 
       {/* ======================================================
@@ -347,9 +328,7 @@ export default function ProfilePage() {
                     </span>
 
                   </div>
-
                 </div>
-
               </div>
 
               <Link
@@ -360,9 +339,7 @@ export default function ProfilePage() {
               </Link>
 
             </div>
-
           </div>
-
         </div>
 
         {/* ====================================================
@@ -401,9 +378,7 @@ export default function ProfilePage() {
 
         <div className="mt-5 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
 
-          {/* ==================================================
-              ACCOUNT INFORMATION
-          ================================================== */}
+          {/* ACCOUNT INFORMATION */}
 
           <section className="rounded-2xl border border-[#e2e5eb] bg-white">
 
@@ -445,9 +420,7 @@ export default function ProfilePage() {
 
           </section>
 
-          {/* ==================================================
-              GAME ACCOUNT
-          ================================================== */}
+          {/* GAME ACCOUNT */}
 
           <section className="rounded-2xl border border-[#e2e5eb] bg-white">
 
@@ -608,10 +581,7 @@ export default function ProfilePage() {
                   <div
                     className="h-full rounded-full bg-[#4f46e5] transition-all"
                     style={{
-                      width: `${Math.min(
-                        winRate,
-                        100
-                      )}%`,
+                      width: `${Math.min(winRate, 100)}%`,
                     }}
                   />
 
@@ -717,9 +687,7 @@ function StatCard({
 
       <p
         className={`mt-2 font-black tracking-tight ${
-          small
-            ? "text-base"
-            : "text-2xl"
+          small ? "text-base" : "text-2xl"
         } ${
           accent
             ? "text-[#4f46e5]"
@@ -745,7 +713,7 @@ function InfoField({
   value: string;
 }) {
   return (
-    <div className="border-b border-[#edf0f4] px-5 py-4 last:border-b-0 sm:px-6 sm:nth-[2]:border-b-0">
+    <div className="border-b border-[#edf0f4] px-5 py-4 sm:px-6">
 
       <p className="text-[9px] font-bold uppercase tracking-[0.12em] text-[#969dac]">
         {label}
@@ -853,8 +821,7 @@ function AccountAction({
 ============================================================ */
 
 function LogoutButton() {
-  const [loading, setLoading] =
-    useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -866,28 +833,22 @@ function LogoutButton() {
           method: "POST",
           credentials: "include",
           headers: {
-            "Content-Type":
-              "application/json",
+            "Content-Type": "application/json",
           },
         }
       );
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.message ||
-            "Logout failed"
+          data.message || "Logout failed"
         );
       }
 
       window.location.href = "/login";
     } catch (error) {
-      console.error(
-        "Logout error:",
-        error
-      );
+      console.error("Logout error:", error);
 
       alert(
         error instanceof Error
@@ -910,9 +871,7 @@ function LogoutButton() {
       <div>
 
         <p className="text-xs font-extrabold text-red-600">
-          {loading
-            ? "Signing out..."
-            : "Sign out"}
+          {loading ? "Signing out..." : "Sign out"}
         </p>
 
         <p className="mt-1 text-[9px] text-[#a0a6b3]">

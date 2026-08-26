@@ -26,8 +26,17 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+  // ======================================================
+  // API CONFIGURATION
+  // ======================================================
+
+  const API_URL = (
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
+  ).replace(/\/+$/, "");
+
+  // ======================================================
+  // HANDLE INPUT
+  // ======================================================
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement>
@@ -35,7 +44,9 @@ export default function RegisterPage() {
     const { name, value, type, checked } = e.target;
 
     if (name === "mobile") {
-      const mobile = value.replace(/\D/g, "").slice(0, 10);
+      const mobile = value
+        .replace(/\D/g, "")
+        .slice(0, 10);
 
       setFormData((prev) => ({
         ...prev,
@@ -47,9 +58,16 @@ export default function RegisterPage() {
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : value,
+      [name]:
+        type === "checkbox"
+          ? checked
+          : value,
     }));
   };
+
+  // ======================================================
+  // SUBMIT REGISTRATION
+  // ======================================================
 
   const handleSubmit = async (
     e: React.FormEvent<HTMLFormElement>
@@ -58,9 +76,9 @@ export default function RegisterPage() {
 
     setError("");
 
-    // ==============================
-    // VALIDATION
-    // ==============================
+    // ======================================================
+    // PERSONAL INFORMATION VALIDATION
+    // ======================================================
 
     if (!formData.fullName.trim()) {
       setError("Please enter your full name.");
@@ -68,7 +86,9 @@ export default function RegisterPage() {
     }
 
     if (formData.fullName.trim().length < 3) {
-      setError("Full name must contain at least 3 characters.");
+      setError(
+        "Full name must contain at least 3 characters."
+      );
       return;
     }
 
@@ -78,7 +98,9 @@ export default function RegisterPage() {
     }
 
     if (formData.username.trim().length < 3) {
-      setError("Username must contain at least 3 characters.");
+      setError(
+        "Username must contain at least 3 characters."
+      );
       return;
     }
 
@@ -103,9 +125,9 @@ export default function RegisterPage() {
       return;
     }
 
-    // ==============================
-    // PASSWORD
-    // ==============================
+    // ======================================================
+    // PASSWORD VALIDATION
+    // ======================================================
 
     if (!formData.password) {
       setError("Please create a password.");
@@ -117,46 +139,59 @@ export default function RegisterPage() {
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
+    if (
+      formData.password !==
+      formData.confirmPassword
+    ) {
       setError("Passwords do not match.");
       return;
     }
 
-    // ==============================
-    // GAME UID
-    // ==============================
+    // ======================================================
+    // GAME UID VALIDATION
+    // ======================================================
 
     if (!formData.gameUid.trim()) {
       setError(`Please enter your ${game} UID.`);
       return;
     }
 
-    // ==============================
-    // UPI ID
-    // ==============================
+    // ======================================================
+    // UPI VALIDATION
+    // ======================================================
 
     if (!formData.upiId.trim()) {
       setError("Please enter your UPI ID.");
       return;
     }
 
-    if (!/^[\w.-]+@[\w.-]+$/.test(formData.upiId.trim())) {
+    if (
+      !/^[\w.-]+@[\w.-]+$/.test(
+        formData.upiId.trim()
+      )
+    ) {
       setError("Please enter a valid UPI ID.");
       return;
     }
 
-    // ==============================
-    // TERMS
-    // ==============================
+    // ======================================================
+    // TERMS VALIDATION
+    // ======================================================
 
     if (!formData.termsAccepted) {
-      setError("Please accept the Terms & Conditions.");
+      setError(
+        "Please accept the Terms & Conditions."
+      );
       return;
     }
 
     setLoading(true);
 
     try {
+      // ====================================================
+      // BACKEND REQUEST
+      // ====================================================
+
       const response = await fetch(
         `${API_URL}/api/auth/register`,
         {
@@ -169,40 +204,68 @@ export default function RegisterPage() {
           credentials: "include",
 
           body: JSON.stringify({
-            fullName: formData.fullName.trim(),
+            fullName:
+              formData.fullName.trim(),
 
-            username: formData.username
-              .trim()
-              .toLowerCase(),
+            username:
+              formData.username
+                .trim()
+                .toLowerCase(),
 
-            mobile: formData.mobile,
+            mobile:
+              formData.mobile,
 
-            email: formData.email
-              .trim()
-              .toLowerCase(),
+            email:
+              formData.email
+                .trim()
+                .toLowerCase(),
 
-            password: formData.password,
+            password:
+              formData.password,
 
             game,
 
-            gameUid: formData.gameUid.trim(),
+            gameUid:
+              formData.gameUid.trim(),
 
-            upiId: formData.upiId
-              .trim()
-              .toLowerCase(),
+            upiId:
+              formData.upiId
+                .trim()
+                .toLowerCase(),
 
-            termsAccepted: formData.termsAccepted,
+            termsAccepted:
+              formData.termsAccepted,
           }),
         }
       );
 
-      const data = await response.json();
+      // ====================================================
+      // READ RESPONSE
+      // ====================================================
+
+      let data: any = {};
+
+      try {
+        data = await response.json();
+      } catch {
+        data = {};
+      }
+
+      // ====================================================
+      // SERVER ERROR
+      // ====================================================
 
       if (!response.ok) {
         throw new Error(
-          data.message || "Registration failed."
+          data.message ||
+            data.error ||
+            `Registration failed (${response.status}).`
         );
       }
+
+      // ====================================================
+      // REGISTRATION ID CHECK
+      // ====================================================
 
       if (!data.registrationId) {
         throw new Error(
@@ -210,9 +273,9 @@ export default function RegisterPage() {
         );
       }
 
-      // ==============================
+      // ====================================================
       // SAVE REGISTRATION SESSION
-      // ==============================
+      // ====================================================
 
       sessionStorage.setItem(
         "registrationId",
@@ -221,33 +284,52 @@ export default function RegisterPage() {
 
       sessionStorage.setItem(
         "registrationMobile",
-        data.mobile || formData.mobile
+        data.mobile ||
+          formData.mobile
       );
 
       sessionStorage.setItem(
         "registrationEmail",
-        data.email || formData.email
+        data.email ||
+          formData.email
       );
 
       sessionStorage.setItem(
         "registrationUsername",
-        data.username || formData.username
+        data.username ||
+          formData.username
       );
 
       sessionStorage.setItem(
         "registrationGame",
-        data.game || game
+        data.game ||
+          game
       );
+
+      // ====================================================
+      // GO TO OTP VERIFICATION
+      // ====================================================
 
       router.push("/register/verify");
     } catch (error) {
-      console.error("Registration error:", error);
+      console.error(
+        "Registration error:",
+        error
+      );
 
-      if (error instanceof TypeError) {
+      // ====================================================
+      // NETWORK / BACKEND CONNECTION ERROR
+      // ====================================================
+
+      if (
+        error instanceof TypeError
+      ) {
         setError(
-          "Cannot connect to backend. Make sure your backend is running on port 5001."
+          "Cannot connect to the backend. Please check your Render backend URL and CORS settings."
         );
-      } else if (error instanceof Error) {
+      } else if (
+        error instanceof Error
+      ) {
         setError(error.message);
       } else {
         setError(
@@ -258,6 +340,10 @@ export default function RegisterPage() {
       setLoading(false);
     }
   };
+
+  // ======================================================
+  // UI
+  // ======================================================
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
@@ -298,7 +384,6 @@ export default function RegisterPage() {
               Login
             </Link>
           </div>
-
         </div>
       </header>
 
@@ -311,7 +396,6 @@ export default function RegisterPage() {
           {/* SIDEBAR */}
 
           <aside className="hidden bg-[#20264a] p-7 text-white lg:block">
-
             <div className="flex h-full flex-col">
 
               <div>
@@ -386,11 +470,9 @@ export default function RegisterPage() {
                     </p>
                   </div>
                 </div>
-
               </div>
 
               <div className="mt-auto rounded-xl border border-white/10 bg-white/[0.05] p-4">
-
                 <p className="text-xs font-semibold">
                   🔒 Secure registration
                 </p>
@@ -399,7 +481,6 @@ export default function RegisterPage() {
                   Your mobile number is verified using a
                   one-time password.
                 </p>
-
               </div>
 
             </div>
@@ -412,7 +493,6 @@ export default function RegisterPage() {
             {/* MOBILE HEADING */}
 
             <div className="mb-7 lg:hidden">
-
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
                 Player registration
               </p>
@@ -424,7 +504,6 @@ export default function RegisterPage() {
               <p className="mt-2 text-sm text-[#7a8498]">
                 Enter your details to get started.
               </p>
-
             </div>
 
             {/* DESKTOP HEADING */}
@@ -447,7 +526,6 @@ export default function RegisterPage() {
                 Fill in the details below to create your
                 account.
               </p>
-
             </div>
 
             <form
@@ -644,18 +722,19 @@ export default function RegisterPage() {
                     />
 
                     <div className="mt-2 flex gap-1">
-
-                      {[1, 6, 8, 10].map((length) => (
-                        <span
-                          key={length}
-                          className={`h-1 flex-1 rounded-full ${
-                            formData.password.length >= length
-                              ? "bg-[#6366f1]"
-                              : "bg-[#e5e7eb]"
-                          }`}
-                        />
-                      ))}
-
+                      {[1, 6, 8, 10].map(
+                        (length) => (
+                          <span
+                            key={length}
+                            className={`h-1 flex-1 rounded-full ${
+                              formData.password.length >=
+                              length
+                                ? "bg-[#6366f1]"
+                                : "bg-[#e5e7eb]"
+                            }`}
+                          />
+                        )
+                      )}
                     </div>
                   </div>
 
@@ -673,7 +752,9 @@ export default function RegisterPage() {
                       id="confirmPassword"
                       name="confirmPassword"
                       type="password"
-                      value={formData.confirmPassword}
+                      value={
+                        formData.confirmPassword
+                      }
                       onChange={handleChange}
                       placeholder="Enter password again"
                       autoComplete="new-password"
@@ -732,7 +813,9 @@ export default function RegisterPage() {
 
                   <button
                     type="button"
-                    onClick={() => setGame("BGMI")}
+                    onClick={() =>
+                      setGame("BGMI")
+                    }
                     className={`relative flex h-[76px] items-center gap-3 rounded-xl border p-3 text-left transition ${
                       game === "BGMI"
                         ? "border-[#6366f1] bg-[#f3f4ff] ring-2 ring-[#6366f1]/10"
@@ -772,7 +855,9 @@ export default function RegisterPage() {
 
                   <button
                     type="button"
-                    onClick={() => setGame("Free Fire")}
+                    onClick={() =>
+                      setGame("Free Fire")
+                    }
                     className={`relative flex h-[76px] items-center gap-3 rounded-xl border p-3 text-left transition ${
                       game === "Free Fire"
                         ? "border-[#6366f1] bg-[#f3f4ff] ring-2 ring-[#6366f1]/10"
@@ -849,7 +934,9 @@ export default function RegisterPage() {
                     htmlFor="upiId"
                     className="mb-1.5 flex items-center justify-between text-xs font-semibold text-[#465168]"
                   >
-                    <span>UPI ID</span>
+                    <span>
+                      UPI ID
+                    </span>
 
                     <span className="font-normal text-[#9aa2b2]">
                       Required
@@ -889,20 +976,25 @@ export default function RegisterPage() {
                   id="termsAccepted"
                   type="checkbox"
                   name="termsAccepted"
-                  checked={formData.termsAccepted}
+                  checked={
+                    formData.termsAccepted
+                  }
                   onChange={handleChange}
                   className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#cfd5df] accent-[#4f46e5]"
                 />
 
                 <span className="text-xs leading-5 text-[#7c8699]">
                   I agree to the{" "}
+
                   <Link
                     href="/terms"
                     className="font-semibold text-[#4f46e5] hover:underline"
                   >
                     Terms & Conditions
                   </Link>{" "}
+
                   and{" "}
+
                   <Link
                     href="/privacy"
                     className="font-semibold text-[#4f46e5] hover:underline"
@@ -986,7 +1078,9 @@ export default function RegisterPage() {
 
             <div className="mt-7 flex items-center justify-center gap-2 border-t border-[#edf0f4] pt-5 text-xs text-[#8b94a6]">
 
-              <span>Already have an account?</span>
+              <span>
+                Already have an account?
+              </span>
 
               <Link
                 href="/login"
@@ -1009,11 +1103,8 @@ export default function RegisterPage() {
             </div>
 
           </section>
-
         </div>
-
       </div>
-
     </main>
   );
 }

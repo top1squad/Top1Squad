@@ -6,10 +6,24 @@ import Link from "next/link";
 // ======================================================
 // API
 // ======================================================
+//
+// IMPORTANT:
+// Set NEXT_PUBLIC_API_URL in your deployment environment
+// to your deployed Express backend URL.
+//
+// Example:
+// https://your-backend.vercel.app
+//
+// For local development:
+// http://localhost:5001
+//
+// Do NOT put Markdown like:
+// [http://localhost:5001](http://localhost:5001)
+// here.
+//
 
 const API_BASE_URL = (
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001"
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001"
 ).replace(/\/$/, "");
 
 // ======================================================
@@ -94,9 +108,11 @@ type TdmMatch = {
 type MatchesResponse = {
   success?: boolean;
   count?: number;
+
   matches?: TdmMatch[];
   tournaments?: TdmMatch[];
   data?: TdmMatch[];
+
   message?: string;
 };
 
@@ -107,16 +123,11 @@ type MatchesResponse = {
 function safeNumber(value: unknown): number {
   const number = Number(value);
 
-  return Number.isFinite(number)
-    ? number
-    : 0;
+  return Number.isFinite(number) ? number : 0;
 }
 
 function safeString(value: unknown): string {
-  if (
-    value === null ||
-    value === undefined
-  ) {
+  if (value === null || value === undefined) {
     return "";
   }
 
@@ -128,52 +139,37 @@ function safeString(value: unknown): string {
 // ======================================================
 
 function money(value: unknown): string {
-  return `₹${safeNumber(
-    value
-  ).toLocaleString("en-IN")}`;
+  return `₹${safeNumber(value).toLocaleString("en-IN")}`;
 }
 
 // ======================================================
 // DATE
 // ======================================================
 
-function formatDate(
-  value?: string
-): string {
+function formatDate(value?: string): string {
   if (!value) {
     return "Date not available";
   }
 
   const date = new Date(value);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return value;
   }
 
-  return date.toLocaleDateString(
-    "en-IN",
-    {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }
-  );
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 // ======================================================
 // GAME
 // ======================================================
 
-function normalizeGame(
-  game?: string
-): string {
-  const value = String(
-    game || ""
-  )
+function normalizeGame(game?: string): string {
+  const value = String(game || "")
     .trim()
     .toLowerCase();
 
@@ -200,12 +196,8 @@ function normalizeGame(
 // STATUS
 // ======================================================
 
-function normalizeStatus(
-  status?: string
-): MatchStatus {
-  const value = String(
-    status || ""
-  )
+function normalizeStatus(status?: string): MatchStatus {
+  const value = String(status || "")
     .trim()
     .toLowerCase();
 
@@ -243,15 +235,11 @@ function normalizeStatus(
 // NORMALIZE MATCH
 // ======================================================
 
-function normalizeMatch(
-  raw: TdmMatch
-): TdmMatch {
+function normalizeMatch(raw: TdmMatch): TdmMatch {
   return {
     ...raw,
 
-    _id: safeString(
-      raw._id
-    ),
+    _id: safeString(raw._id),
 
     name:
       raw.name ||
@@ -266,24 +254,20 @@ function normalizeMatch(
       raw.gameType ||
       "TDM",
 
-    game:
-      normalizeGame(
-        raw.game ||
-          raw.gameName
-      ),
+    game: normalizeGame(
+      raw.game || raw.gameName
+    ),
 
-    prize:
-      safeNumber(
-        raw.prize ??
-          raw.prizePool ??
-          raw.prizeMoney
-      ),
+    prize: safeNumber(
+      raw.prize ??
+        raw.prizePool ??
+        raw.prizeMoney
+    ),
 
-    entryFee:
-      safeNumber(
-        raw.entryFee ??
-          raw.registrationFee
-      ),
+    entryFee: safeNumber(
+      raw.entryFee ??
+        raw.registrationFee
+    ),
 
     date:
       raw.date ||
@@ -297,23 +281,21 @@ function normalizeMatch(
       raw.startTime ||
       "",
 
-    maxTeams:
-      safeNumber(
-        raw.maxTeams ??
-          raw.maxSlots ??
-          raw.slots ??
-          raw.totalSlots ??
-          2
-      ),
+    maxTeams: safeNumber(
+      raw.maxTeams ??
+        raw.maxSlots ??
+        raw.slots ??
+        raw.totalSlots ??
+        2
+    ),
 
-    registeredTeams:
-      safeNumber(
-        raw.registeredTeams ??
-          raw.registeredSlots ??
-          raw.filledSlots ??
-          raw.registeredPlayers ??
-          0
-      ),
+    registeredTeams: safeNumber(
+      raw.registeredTeams ??
+        raw.registeredSlots ??
+        raw.filledSlots ??
+        raw.registeredPlayers ??
+        0
+    ),
 
     status:
       raw.status ||
@@ -333,36 +315,25 @@ function normalizeMatch(
 
 async function fetchTdmMatches(): Promise<MatchesResponse> {
   const url =
-    `${API_BASE_URL}` +
-    `/api/squad-clash-tdm?type=TDM`;
+    `${API_BASE_URL}/api/squad-clash-tdm?type=TDM`;
 
   console.log(
     "Loading TDM matches from:",
     url
   );
 
-  const response =
-    await fetch(url, {
-      method: "GET",
+  const response = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    cache: "no-store",
+    headers: {
+      Accept: "application/json",
+    },
+  });
 
-      credentials:
-        "include",
+  const text = await response.text();
 
-      cache:
-        "no-store",
-
-      headers: {
-        Accept:
-          "application/json",
-      },
-    });
-
-  const text =
-    await response.text();
-
-  let data:
-    MatchesResponse | null =
-    null;
+  let data: MatchesResponse | null = null;
 
   try {
     data = text
@@ -407,27 +378,15 @@ async function fetchTdmMatches(): Promise<MatchesResponse> {
 function extractMatches(
   data: MatchesResponse
 ): TdmMatch[] {
-  if (
-    Array.isArray(
-      data?.matches
-    )
-  ) {
+  if (Array.isArray(data?.matches)) {
     return data.matches;
   }
 
-  if (
-    Array.isArray(
-      data?.tournaments
-    )
-  ) {
+  if (Array.isArray(data?.tournaments)) {
     return data.tournaments;
   }
 
-  if (
-    Array.isArray(
-      data?.data
-    )
-  ) {
+  if (Array.isArray(data?.data)) {
     return data.data;
   }
 
@@ -439,32 +398,22 @@ function extractMatches(
 // ======================================================
 
 export default function TdmPage() {
-  const [
-    matches,
-    setMatches,
-  ] = useState<TdmMatch[]>([]);
+  const [matches, setMatches] =
+    useState<TdmMatch[]>([]);
 
-  const [
-    filter,
-    setFilter,
-  ] = useState<Filter>("All");
+  const [filter, setFilter] =
+    useState<Filter>("All");
 
-  const [
-    gameFilter,
-    setGameFilter,
-  ] = useState<
-    "All" | "BGMI" | "Free Fire"
-  >("All");
+  const [gameFilter, setGameFilter] =
+    useState<"All" | "BGMI" | "Free Fire">(
+      "All"
+    );
 
-  const [
-    loading,
-    setLoading,
-  ] = useState(true);
+  const [loading, setLoading] =
+    useState(true);
 
-  const [
-    error,
-    setError,
-  ] = useState("");
+  const [error, setError] =
+    useState("");
 
   // ====================================================
   // LOAD MATCHES
@@ -495,14 +444,9 @@ export default function TdmPage() {
 
         const normalizedMatches =
           receivedMatches
-            .map(
-              normalizeMatch
-            )
-            .filter(
-              (match) =>
-                Boolean(
-                  match._id
-                )
+            .map(normalizeMatch)
+            .filter((match) =>
+              Boolean(match._id)
             );
 
         setMatches(
@@ -611,9 +555,7 @@ export default function TdmPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#030712] text-white">
 
-      {/* ==================================================
-          BACKGROUND
-      ================================================== */}
+      {/* BACKGROUND */}
 
       <div className="pointer-events-none fixed inset-0 -z-0">
         <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-blue-600/10 blur-[140px]" />
@@ -631,9 +573,7 @@ export default function TdmPage() {
         />
       </div>
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <section className="relative z-10 border-b border-white/[0.07] bg-[#030712]/90">
         <div className="mx-auto max-w-7xl px-5 py-14 sm:px-8 sm:py-20">
@@ -654,6 +594,7 @@ export default function TdmPage() {
 
               <h1 className="text-4xl font-black tracking-[-0.04em] text-white sm:text-5xl lg:text-6xl">
                 TDM
+
                 <span className="block bg-gradient-to-r from-blue-400 via-blue-500 to-cyan-400 bg-clip-text text-transparent">
                   Matches
                 </span>
@@ -695,9 +636,7 @@ export default function TdmPage() {
         </div>
       </section>
 
-      {/* ==================================================
-          FILTERS
-      ================================================== */}
+      {/* FILTERS */}
 
       <section className="relative z-10 mx-auto max-w-7xl px-5 pt-8 sm:px-8">
 
@@ -709,9 +648,7 @@ export default function TdmPage() {
 
             <FilterButton
               label={`All (${matches.length})`}
-              active={
-                filter === "All"
-              }
+              active={filter === "All"}
               onClick={() =>
                 setFilter("All")
               }
@@ -719,9 +656,7 @@ export default function TdmPage() {
 
             <FilterButton
               label={`Live (${liveCount})`}
-              active={
-                filter === "Live"
-              }
+              active={filter === "Live"}
               onClick={() =>
                 setFilter("Live")
               }
@@ -729,9 +664,7 @@ export default function TdmPage() {
 
             <FilterButton
               label={`Upcoming (${upcomingCount})`}
-              active={
-                filter === "Upcoming"
-              }
+              active={filter === "Upcoming"}
               onClick={() =>
                 setFilter("Upcoming")
               }
@@ -739,9 +672,7 @@ export default function TdmPage() {
 
             <FilterButton
               label={`Completed (${completedCount})`}
-              active={
-                filter === "Completed"
-              }
+              active={filter === "Completed"}
               onClick={() =>
                 setFilter("Completed")
               }
@@ -771,17 +702,14 @@ export default function TdmPage() {
                   gameFilter === "BGMI"
                 }
                 onClick={() =>
-                  setGameFilter(
-                    "BGMI"
-                  )
+                  setGameFilter("BGMI")
                 }
               />
 
               <GameButton
                 label="Free Fire"
                 active={
-                  gameFilter ===
-                  "Free Fire"
+                  gameFilter === "Free Fire"
                 }
                 onClick={() =>
                   setGameFilter(
@@ -798,9 +726,7 @@ export default function TdmPage() {
 
       </section>
 
-      {/* ==================================================
-          MATCH LIST
-      ================================================== */}
+      {/* MATCH LIST */}
 
       <section className="relative z-10 mx-auto max-w-7xl px-5 py-8 pb-20 sm:px-8">
 
@@ -812,12 +738,11 @@ export default function TdmPage() {
 
         {/* ERROR */}
 
-        {!loading &&
-          error && (
-            <ErrorState
-              message={error}
-            />
-          )}
+        {!loading && error && (
+          <ErrorState
+            message={error}
+          />
+        )}
 
         {/* EMPTY */}
 
@@ -829,6 +754,10 @@ export default function TdmPage() {
               hasMatches={
                 matches.length > 0
               }
+              onClearFilters={() => {
+                setFilter("All");
+                setGameFilter("All");
+              }}
             />
           )}
 
@@ -866,9 +795,7 @@ export default function TdmPage() {
                 {filteredMatches.map(
                   (match) => (
                     <TdmMatchCard
-                      key={
-                        match._id
-                      }
+                      key={match._id}
                       match={match}
                     />
                   )
@@ -975,51 +902,41 @@ function TdmMatchCard({
 }: {
   match: TdmMatch;
 }) {
-  const game =
-    normalizeGame(
-      match.game
-    );
+  const game = normalizeGame(
+    match.game
+  );
 
-  const status =
-    normalizeStatus(
-      match.status
-    );
+  const status = normalizeStatus(
+    match.status
+  );
 
-  const teams =
-    safeNumber(
-      match.registeredTeams
-    );
+  const teams = safeNumber(
+    match.registeredTeams
+  );
 
   const maxTeams =
-    safeNumber(
-      match.maxTeams
-    ) || 2;
+    safeNumber(match.maxTeams) || 2;
 
   const full =
     teams >= maxTeams;
 
-  const progress =
-    Math.min(
-      (teams / maxTeams) *
-        100,
-      100
-    );
+  const progress = Math.min(
+    (teams / maxTeams) * 100,
+    100
+  );
 
   const matchName =
-    match.name ||
-    "TDM Match";
+    match.name || "TDM Match";
 
   const map =
     match.map ||
     "Map not specified";
 
   const date =
-    match.date ||
-    "";
+    match.date || "";
 
   const time =
-    match.time ||
-    "Time TBA";
+    match.time || "Time TBA";
 
   return (
     <article className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-[#070d1a] transition-all duration-300 hover:border-blue-500/25 hover:bg-[#091121]">
@@ -1036,9 +953,7 @@ function TdmMatchCard({
 
       <div className="p-5 sm:p-6">
 
-        {/* ==================================================
-            TOP
-        ================================================== */}
+        {/* TOP */}
 
         <div className="flex items-start justify-between gap-4">
 
@@ -1099,17 +1014,13 @@ function TdmMatchCard({
 
         </div>
 
-        {/* ==================================================
-            MOBILE DATE
-        ================================================== */}
+        {/* MOBILE DATE */}
 
         <div className="mt-5 grid grid-cols-2 gap-3 sm:hidden">
 
           <Detail
             label="Date"
-            value={formatDate(
-              date
-            )}
+            value={formatDate(date)}
           />
 
           <Detail
@@ -1119,9 +1030,7 @@ function TdmMatchCard({
 
         </div>
 
-        {/* ==================================================
-            DESCRIPTION
-        ================================================== */}
+        {/* DESCRIPTION */}
 
         {match.description && (
           <p className="mt-5 line-clamp-2 text-sm leading-6 text-slate-500">
@@ -1129,17 +1038,13 @@ function TdmMatchCard({
           </p>
         )}
 
-        {/* ==================================================
-            DETAILS
-        ================================================== */}
+        {/* DETAILS */}
 
         <div className="mt-6 grid grid-cols-2 gap-3">
 
           <Detail
             label="Prize Pool"
-            value={money(
-              match.prize
-            )}
+            value={money(match.prize)}
             blue
           />
 
@@ -1168,9 +1073,7 @@ function TdmMatchCard({
 
         </div>
 
-        {/* ==================================================
-            PROGRESS
-        ================================================== */}
+        {/* PROGRESS */}
 
         <div className="mt-6">
 
@@ -1203,9 +1106,7 @@ function TdmMatchCard({
 
         </div>
 
-        {/* ==================================================
-            ACTIONS
-        ================================================== */}
+        {/* ACTIONS */}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
 
@@ -1228,7 +1129,6 @@ function TdmMatchCard({
         </div>
 
       </div>
-
     </article>
   );
 }
@@ -1358,7 +1258,6 @@ function LoadingState() {
               <div className="mt-6 h-12 rounded-xl bg-white/[0.06]" />
 
             </div>
-
           </div>
         )
       )}
@@ -1408,9 +1307,7 @@ function ErrorState({
           </button>
 
         </div>
-
       </div>
-
     </div>
   );
 }
@@ -1421,8 +1318,10 @@ function ErrorState({
 
 function EmptyState({
   hasMatches,
+  onClearFilters,
 }: {
   hasMatches: boolean;
+  onClearFilters: () => void;
 }) {
   return (
     <div className="mx-auto max-w-2xl">
@@ -1434,23 +1333,25 @@ function EmptyState({
         </div>
 
         <h2 className="mt-6 text-2xl font-black tracking-tight text-white">
+
           {hasMatches
             ? "No matches match your filters"
             : "No TDM matches found"}
+
         </h2>
 
         <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-slate-500">
+
           {hasMatches
             ? "Try changing the status or game filter."
             : "There are currently no TDM matches available."}
+
         </p>
 
         {hasMatches ? (
           <button
             type="button"
-            onClick={() => {
-              setFilterOutside();
-            }}
+            onClick={onClearFilters}
             className="mt-7 rounded-xl bg-blue-500 px-6 py-3 text-sm font-bold text-white transition-all duration-200 hover:bg-blue-400 hover:shadow-[0_0_25px_rgba(59,130,246,0.2)]"
           >
             Clear Filters
@@ -1465,20 +1366,6 @@ function EmptyState({
         )}
 
       </div>
-
     </div>
   );
-}
-
-// ======================================================
-// CLEAR FILTER HELPER
-// ======================================================
-
-function setFilterOutside() {
-  /*
-   * EmptyState is intentionally kept independent.
-   * Reloading returns the page to the default All filter.
-   */
-
-  window.location.reload();
 }

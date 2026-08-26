@@ -6,10 +6,15 @@ import { useCallback, useEffect, useState } from "react";
 // API CONFIG
 // ======================================================
 
-const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ||
-  "http://localhost:5001"
-).replace(/\/$/, "");
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+if (!RAW_API_URL) {
+  throw new Error(
+    "NEXT_PUBLIC_API_URL is not configured. Please add your deployed backend URL to the frontend environment variables."
+  );
+}
+
+const API_URL = RAW_API_URL.replace(/\/+$/, "");
 
 // ======================================================
 // TYPES
@@ -172,7 +177,10 @@ function normalizeWinner(
 // ======================================================
 
 function extractTournaments(
-  data: TournamentResponse | Tournament[] | null
+  data:
+    | TournamentResponse
+    | Tournament[]
+    | null
 ): Tournament[] {
   if (Array.isArray(data)) {
     return data
@@ -221,7 +229,10 @@ function extractTournaments(
 // ======================================================
 
 function extractLeaderboard(
-  data: LeaderboardResponse | Winner[] | null
+  data:
+    | LeaderboardResponse
+    | Winner[]
+    | null
 ): Winner[] {
   if (Array.isArray(data)) {
     return data.map(
@@ -442,8 +453,6 @@ export default function LeaderboardPage() {
                     err
                   );
 
-                  // Do not break the entire page
-                  // if one tournament has no leaderboard.
                   return {
                     tournament,
                     leaderboard: [],
@@ -498,7 +507,7 @@ export default function LeaderboardPage() {
           <div className="mb-8">
             <div className="h-10 w-56 animate-pulse rounded-lg bg-slate-200" />
 
-            <div className="mt-3 h-5 w-80 animate-pulse rounded bg-slate-200" />
+            <div className="mt-3 h-5 w-80 rounded bg-slate-200" />
           </div>
 
           <div className="space-y-8">
@@ -544,9 +553,7 @@ export default function LeaderboardPage() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900">
 
-      {/* ==================================================
-          BACKGROUND
-      ================================================== */}
+      {/* BACKGROUND */}
 
       <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden">
         <div className="absolute left-1/2 top-0 h-[500px] w-[800px] -translate-x-1/2 rounded-full bg-blue-100/70 blur-[140px]" />
@@ -558,15 +565,14 @@ export default function LeaderboardPage() {
           style={{
             backgroundImage:
               "linear-gradient(#2563eb 1px, transparent 1px), linear-gradient(90deg, #2563eb 1px, transparent 1px)",
+
             backgroundSize:
               "50px 50px",
           }}
         />
       </div>
 
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+      {/* HEADER */}
 
       <section className="relative z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
@@ -609,12 +615,9 @@ export default function LeaderboardPage() {
 
               Refresh
             </button>
-
           </div>
 
-          {/* ==================================================
-              STATS
-          ================================================== */}
+          {/* STATS */}
 
           <div className="mt-10 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
 
@@ -652,19 +655,14 @@ export default function LeaderboardPage() {
             />
 
           </div>
-
         </div>
       </section>
 
-      {/* ==================================================
-          CONTENT
-      ================================================== */}
+      {/* CONTENT */}
 
       <section className="relative z-10 mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
 
-        {/* ==================================================
-            ERROR
-        ================================================== */}
+        {/* ERROR */}
 
         {error && (
           <div className="mx-auto mb-8 max-w-2xl overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
@@ -697,9 +695,7 @@ export default function LeaderboardPage() {
           </div>
         )}
 
-        {/* ==================================================
-            NO TOURNAMENTS
-        ================================================== */}
+        {/* NO TOURNAMENTS */}
 
         {!error &&
           leaderboards.length === 0 && (
@@ -721,13 +717,10 @@ export default function LeaderboardPage() {
                 </p>
 
               </div>
-
             </div>
           )}
 
-        {/* ==================================================
-            TOURNAMENTS
-        ================================================== */}
+        {/* TOURNAMENTS */}
 
         {!error &&
           leaderboards.length > 0 && (
@@ -843,12 +836,12 @@ function TournamentLeaderboardCard({
           />
 
         </div>
-
       </div>
 
       {/* WINNERS */}
 
       {leaderboard.length === 0 ? (
+
         <div className="p-10 text-center sm:p-14">
 
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-2xl">
@@ -865,9 +858,12 @@ function TournamentLeaderboardCard({
           </p>
 
         </div>
+
       ) : (
+
         <div className="grid gap-5 p-6 md:grid-cols-2 lg:grid-cols-3">
-          {leaderboard
+
+          {[...leaderboard]
             .sort(
               (a, b) =>
                 a.rank - b.rank
@@ -882,6 +878,7 @@ function TournamentLeaderboardCard({
                 />
               )
             )}
+
         </div>
       )}
 

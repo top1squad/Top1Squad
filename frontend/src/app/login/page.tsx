@@ -1,40 +1,146 @@
 "use client";
 
 import Link from "next/link";
-import React, {
-  ChangeEvent,
-  FormEvent,
-  Suspense,
-  useState,
-} from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+// ======================================================
+// PRODUCTION API CONFIG
+// ======================================================
+//
+// IMPORTANT:
+// Replace this with your DEPLOYED EXPRESS BACKEND URL.
+//
+// Example:
+// https://top1squad-backend.onrender.com
+//
+// Do NOT use:
+// http://localhost:5001
+//
+// in production.
+//
+// ======================================================
 
-function LoginForm() {
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL;
+
+// ======================================================
+// TYPES
+// ======================================================
+
+type LoggedInUser = {
+  _id?: string;
+  id?: string;
+  username?: string;
+  fullName?: string;
+  email?: string;
+  mobile?: string;
+  game?: string;
+  gameUid?: string;
+  bgmiUid?: string;
+  freeFireUid?: string;
+};
+
+type LoginResponse = {
+  success?: boolean;
+  message?: string;
+  token?: string;
+  accessToken?: string;
+  user?: LoggedInUser;
+};
+
+type MeResponse = {
+  success?: boolean;
+  message?: string;
+  user?: LoggedInUser;
+};
+
+// ======================================================
+// PAGE
+// ======================================================
+
+export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(false);
+  // ====================================================
+  // FORM
+  // ====================================================
+
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+    rememberMe: false,
+  });
+
+  // ====================================================
+  // UI STATE
+  // ====================================================
+
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // ====================================================
+  // INPUT CHANGE
+  // ====================================================
+
+  const handleChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const { name, value, type, checked } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+
+    if (error) {
+      setError("");
+    }
+  };
+
+  // ====================================================
+  // SAFE REDIRECT
+  // ====================================================
+
+  const getDestination = () => {
+    const redirect = searchParams.get("redirect");
+
+    if (
+      redirect &&
+      redirect.startsWith("/") &&
+      !redirect.startsWith("//")
+    ) {
+      return redirect;
+    }
+
+    return "/";
+  };
+
+  // ====================================================
+  // LOGIN
+  // ====================================================
+
   const handleSubmit = async (
-    event: FormEvent<HTMLFormElement>
+    event: React.FormEvent<HTMLFormElement>
   ) => {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
-    const cleanUsername = username.trim().toLowerCase();
+    // ==================================================
+    // VALIDATION
+    // ==================================================
 
-    if (!cleanUsername) {
+    const username =
+      formData.username.trim().toLowerCase();
+
+    const password = formData.password;
+
+    if (!username) {
       setError("Please enter your username.");
       return;
     }
@@ -44,399 +150,430 @@ function LoginForm() {
       return;
     }
 
+    // ==================================================
+    // CHECK API CONFIG
+    // ==================================================
+
+    if (
+      !API_URL ||
+      API_URL.includes("YOUR-BACKEND-DOMAIN")
+    ) {
+      setError(
+        "Backend URL is not configured. Please update API_URL in this file."
+      );
+
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const loginResponse = await fetch(
-        `${API_URL}/api/auth/login`,
-        {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            username: cleanUsername,
-            password,
-            rememberMe,
-          }),
-        }
-      );
+      // =================================================
+      // LOGIN URL
+      // =================================================
 
-      const loginText = await loginResponse.text();
+      const loginUrl =
+        `${API_URL}/api/auth/login`;
 
-      let loginData: {
-        success?: boolean;
-        message?: string;
-        user?: {
-          username?: string;
-        };
-      } = {};
+      console.log("LOGIN REQUEST:", {
+        url: loginUrl,
+        username,
+      });
+
+      // =================================================
+      // LOGIN REQUEST
+      // =================================================
+
+      const response = await fetch(loginUrl, {
+        method: "POST",
+
+        credentials: "include",
+
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+
+        cache: "no-store",
+
+        body: JSON.stringify({
+          username,
+          password,
+          rememberMe: formData.rememberMe,
+        }),
+      });
+
+      // =================================================
+      // READ RESPONSE
+      // =================================================
+
+      const responseText =
+        await response.text();
+
+      let data: LoginResponse = {};
 
       try {
-        loginData = JSON.parse(loginText);
+        data = JSON.parse(responseText);
       } catch {
-        loginData = {};
+        console.error(
+          "LOGIN API RETURNED NON-JSON:",
+          responseText
+        );
       }
 
-      if (!loginResponse.ok || loginData.success === false) {
+      console.log("LOGIN RESPONSE:", {
+        status: response.status,
+        ok: response.ok,
+        data,
+      });
+
+      // =================================================
+      // LOGIN FAILED
+      // =================================================
+
+      if (
+        !response.ok ||
+        data.success === false
+      ) {
         setError(
-          loginData.message ||
+          data.message ||
             "Invalid username or password."
         );
+
         return;
       }
 
+      // =================================================
+      // VERIFY SESSION
+      // =================================================
+
+      const meUrl =
+        `${API_URL}/api/auth/me`;
+
+      console.log(
+        "VERIFYING SESSION:",
+        meUrl
+      );
+
       const meResponse = await fetch(
-        `${API_URL}/api/auth/me`,
+        meUrl,
         {
           method: "GET",
+
           credentials: "include",
+
           headers: {
             Accept: "application/json",
           },
+
           cache: "no-store",
         }
       );
 
-      const meText = await meResponse.text();
+      const meText =
+        await meResponse.text();
 
-      let meData: {
-        success?: boolean;
-        message?: string;
-        user?: {
-          username?: string;
-        };
-      } = {};
+      let meData: MeResponse = {};
 
       try {
         meData = JSON.parse(meText);
       } catch {
-        meData = {};
+        console.error(
+          "AUTH ME API RETURNED NON-JSON:",
+          meText
+        );
       }
 
-      if (!meResponse.ok || !meData.user) {
+      console.log("AUTH ME RESPONSE:", {
+        status: meResponse.status,
+        ok: meResponse.ok,
+        data: meData,
+      });
+
+      // =================================================
+      // SESSION VERIFICATION FAILED
+      // =================================================
+
+      if (
+        !meResponse.ok ||
+        !meData.user
+      ) {
         setError(
           meData.message ||
-            "Login succeeded, but the session could not be verified."
+            "Login succeeded, but the session could not be verified. Please try again."
         );
+
         return;
       }
 
-      setSuccess(
-        meData.user.username
-          ? `Welcome back, ${meData.user.username}!`
-          : "Welcome back!"
+      // =================================================
+      // SUCCESS
+      // =================================================
+
+      console.log(
+        "LOGIN + SESSION SUCCESS"
       );
 
-      const redirect = searchParams.get("redirect");
+      console.log(
+        "USER:",
+        meData.user
+      );
+
+      setSuccess(
+        `Welcome back${
+          meData.user.username
+            ? `, ${meData.user.username}`
+            : ""
+        }!`
+      );
+
+      // =================================================
+      // REDIRECT
+      // =================================================
 
       const destination =
-        redirect &&
-        redirect.startsWith("/") &&
-        !redirect.startsWith("//")
-          ? redirect
-          : "/";
+        getDestination();
+
+      console.log(
+        "REDIRECTING TO:",
+        destination
+      );
 
       setTimeout(() => {
         router.replace(destination);
         router.refresh();
       }, 300);
-    } catch (error) {
-      console.error("LOGIN ERROR:", error);
+    } catch (err) {
+      console.error(
+        "LOGIN ERROR:",
+        err
+      );
 
       setError(
-        "Cannot connect to the server. Make sure the backend is running on port 5001."
+        "Cannot connect to the backend server. Please check your backend URL and CORS configuration."
       );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUsernameChange = (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    setUsername(event.target.value);
-
-    if (error) {
-      setError("");
-    }
-  };
-
-  const handlePasswordChange = (
-    event: ChangeEvent<HTMLInputElement>
-  ) => {
-    setPassword(event.target.value);
-
-    if (error) {
-      setError("");
-    }
-  };
+  // ====================================================
+  // RENDER
+  // ====================================================
 
   return (
-    <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
-      <header className="border-b border-[#e6e9f0] bg-white">
-        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
-          <Link
-            href="/"
-            className="flex items-center gap-3"
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4f46e5] text-lg">
-              🎮
-            </div>
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <div className="flex min-h-screen items-center justify-center px-5 py-10">
+        <div className="w-full max-w-md">
 
-            <div>
-              <p className="text-[15px] font-extrabold">
-                Tournament Arena
-              </p>
+          {/* LOGO */}
 
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
-                Competitive Gaming
-              </p>
-            </div>
-          </Link>
+          <div className="mb-8 text-center">
+            <Link
+              href="/"
+              className="text-2xl font-black"
+            >
+              🎮 TOURNAMENT
+              <span className="text-orange-500">
+                ARENA
+              </span>
+            </Link>
 
-          <Link
-            href="/register"
-            className="rounded-lg border border-[#dce1ea] px-3.5 py-2 text-xs font-semibold text-[#4b5568] hover:border-[#6366f1] hover:text-[#4f46e5]"
-          >
-            Create account
-          </Link>
-        </div>
-      </header>
+            <p className="mt-3 text-sm text-zinc-500">
+              Welcome back, gamer!
+            </p>
+          </div>
 
-      <div className="mx-auto flex min-h-[calc(100vh-72px)] max-w-7xl items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
-        <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[#e2e6ee] bg-white shadow-lg lg:grid-cols-[0.8fr_1.2fr]">
-          <section className="hidden bg-[#20264a] p-10 text-white lg:flex">
-            <div className="flex w-full flex-col">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6366f1]">
-                  🎮
-                </div>
+          {/* LOGIN CARD */}
 
-                <div>
-                  <p className="text-sm font-extrabold">
-                    Tournament Arena
-                  </p>
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
 
-                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#a5b4fc]">
-                    Player platform
-                  </p>
-                </div>
-              </div>
+            <h1 className="text-2xl font-black">
+              Login
+            </h1>
 
-              <div className="mt-20">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a5b4fc]">
-                  Welcome back
-                </p>
+            <p className="mt-2 text-sm text-zinc-500">
+              Login to manage your tournaments
+              and matches.
+            </p>
 
-                <h1 className="mt-4 text-4xl font-extrabold">
-                  Ready to
-                  <span className="block text-[#818cf8]">
-                    compete?
-                  </span>
-                </h1>
+            {/* FORM */}
 
-                <p className="mt-5 max-w-[330px] text-sm leading-6 text-[#b9c0d4]">
-                  Sign in to manage your profile, join
-                  tournaments and continue your competitive
-                  journey.
-                </p>
-              </div>
+            <form
+              onSubmit={handleSubmit}
+              className="mt-8 space-y-5"
+            >
 
-              <div className="mt-auto space-y-3">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  🏆 Join tournaments
-                </div>
+              {/* USERNAME */}
 
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  👤 Manage your profile
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
-                  ⚡ Play & compete
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="flex items-center bg-white">
-            <div className="w-full p-6 sm:p-9 lg:p-12">
-              <div className="mx-auto w-full max-w-[400px]">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
-                  Account access
-                </p>
-
-                <h1 className="mt-3 text-3xl font-extrabold">
-                  Welcome back
-                </h1>
-
-                <p className="mt-2 text-sm text-[#7a8498]">
-                  Sign in to continue to your Tournament Arena
-                  account.
-                </p>
-
-                <form
-                  onSubmit={handleSubmit}
-                  className="mt-8 space-y-5"
+              <div>
+                <label
+                  htmlFor="username"
+                  className="text-sm font-semibold text-zinc-300"
                 >
-                  <div>
-                    <label
-                      htmlFor="username"
-                      className="mb-2 block text-xs font-semibold"
-                    >
-                      Username
-                    </label>
+                  Username
+                </label>
 
-                    <input
-                      id="username"
-                      name="username"
-                      type="text"
-                      value={username}
-                      onChange={handleUsernameChange}
-                      placeholder="Enter your username"
-                      autoComplete="username"
-                      disabled={loading}
-                      className="h-12 w-full rounded-lg border border-[#dce1ea] bg-[#fafbfc] px-4 text-sm outline-none focus:border-[#6366f1] focus:bg-white"
-                    />
-                  </div>
+                <input
+                  id="username"
+                  name="username"
+                  type="text"
+                  value={formData.username}
+                  onChange={handleChange}
+                  placeholder="Enter your username"
+                  autoComplete="username"
+                  autoFocus
+                  disabled={loading}
+                  className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                />
+              </div>
 
-                  <div>
-                    <div className="mb-2 flex items-center justify-between">
-                      <label
-                        htmlFor="password"
-                        className="text-xs font-semibold"
-                      >
-                        Password
-                      </label>
+              {/* PASSWORD */}
 
-                      <Link
-                        href="/forgot-password"
-                        className="text-[11px] font-semibold text-[#7c8699] hover:text-[#4f46e5]"
-                      >
-                        Forgot password?
-                      </Link>
-                    </div>
+              <div>
+                <div className="flex items-center justify-between">
 
-                    <div className="relative">
-                      <input
-                        id="password"
-                        name="password"
-                        type={
-                          showPassword
-                            ? "text"
-                            : "password"
-                        }
-                        value={password}
-                        onChange={handlePasswordChange}
-                        placeholder="Enter your password"
-                        autoComplete="current-password"
-                        disabled={loading}
-                        className="h-12 w-full rounded-lg border border-[#dce1ea] bg-[#fafbfc] px-4 pr-16 text-sm outline-none focus:border-[#6366f1] focus:bg-white"
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setShowPassword(
-                            (value) => !value
-                          )
-                        }
-                        disabled={loading}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-[#7c8699]"
-                      >
-                        {showPassword ? "Hide" : "Show"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <label className="flex items-center gap-2 text-xs text-[#7d8799]">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(event) =>
-                        setRememberMe(event.target.checked)
-                      }
-                      disabled={loading}
-                    />
-
-                    Remember me
+                  <label
+                    htmlFor="password"
+                    className="text-sm font-semibold text-zinc-300"
+                  >
+                    Password
                   </label>
 
-                  {error && (
-                    <div
-                      role="alert"
-                      className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-600"
-                    >
-                      {error}
-                    </div>
-                  )}
+                  <Link
+                    href="/forgot-password"
+                    className="text-xs font-semibold text-orange-500 transition hover:text-orange-400"
+                  >
+                    Forgot password?
+                  </Link>
+                </div>
 
-                  {success && (
-                    <div
-                      role="status"
-                      className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-xs text-green-600"
-                    >
-                      {success}
-                    </div>
-                  )}
+                <div className="relative">
+
+                  <input
+                    id="password"
+                    name="password"
+                    type={
+                      showPassword
+                        ? "text"
+                        : "password"
+                    }
+                    value={formData.password}
+                    onChange={handleChange}
+                    placeholder="Enter your password"
+                    autoComplete="current-password"
+                    disabled={loading}
+                    className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 pr-20 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  />
 
                   <button
-                    type="submit"
+                    type="button"
+                    onClick={() =>
+                      setShowPassword(
+                        (previous) =>
+                          !previous
+                      )
+                    }
                     disabled={loading}
-                    className="flex h-12 w-full items-center justify-center rounded-lg bg-[#4f46e5] text-sm font-bold text-white hover:bg-[#4338ca] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500 hover:text-white disabled:opacity-50"
                   >
-                    {loading ? "Signing in..." : "Sign in"}
+                    {showPassword
+                      ? "Hide"
+                      : "Show"}
                   </button>
-                </form>
-
-                <div className="mt-7 border-t border-[#edf0f4] pt-5 text-center">
-                  <p className="text-xs text-[#929bad]">
-                    New to Tournament Arena?
-
-                    <Link
-                      href="/register"
-                      className="ml-1.5 font-bold text-[#4f46e5]"
-                    >
-                      Create an account
-                    </Link>
-                  </p>
-                </div>
-
-                <div className="mt-5 flex items-center justify-between">
-                  <Link
-                    href="/"
-                    className="text-[11px] text-[#9aa2b2] hover:text-[#4f46e5]"
-                  >
-                    ← Back to home
-                  </Link>
-
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#b0b6c2]">
-                    Secure access
-                  </span>
                 </div>
               </div>
+
+              {/* REMEMBER ME */}
+
+              <div className="flex items-center gap-2">
+
+                <input
+                  id="rememberMe"
+                  name="rememberMe"
+                  type="checkbox"
+                  checked={
+                    formData.rememberMe
+                  }
+                  onChange={handleChange}
+                  disabled={loading}
+                  className="h-4 w-4 accent-orange-500"
+                />
+
+                <label
+                  htmlFor="rememberMe"
+                  className="cursor-pointer text-sm text-zinc-500"
+                >
+                  Remember me
+                </label>
+
+              </div>
+
+              {/* ERROR */}
+
+              {error && (
+                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+                  <p className="text-sm font-medium text-red-400">
+                    {error}
+                  </p>
+                </div>
+              )}
+
+              {/* SUCCESS */}
+
+              {success && (
+                <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
+                  <p className="text-sm font-medium text-green-400">
+                    {success}
+                  </p>
+                </div>
+              )}
+
+              {/* LOGIN BUTTON */}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full rounded-xl bg-orange-500 px-5 py-3 font-bold text-black transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading
+                  ? "Logging in..."
+                  : "Login"}
+              </button>
+
+            </form>
+
+            {/* REGISTER */}
+
+            <div className="mt-7 border-t border-zinc-800 pt-6 text-center">
+
+              <p className="text-sm text-zinc-500">
+                Don't have an account?
+              </p>
+
+              <Link
+                href="/register"
+                className="mt-2 inline-block font-bold text-orange-500 hover:text-orange-400"
+              >
+                Create an account
+              </Link>
+
             </div>
-          </section>
+          </div>
+
+          {/* BACK HOME */}
+
+          <div className="mt-6 text-center">
+            <Link
+              href="/"
+              className="text-sm text-zinc-600 transition hover:text-white"
+            >
+              ← Back to Home
+            </Link>
+          </div>
+
         </div>
       </div>
     </main>
-  );
-}
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb]">
-          <p className="text-sm text-[#4f46e5]">
-            Loading login...
-          </p>
-        </main>
-      }
-    >
-      <LoginForm />
-    </Suspense>
   );
 }
