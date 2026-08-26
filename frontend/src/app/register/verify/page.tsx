@@ -22,15 +22,18 @@ export default function VerifyPage() {
   // API URL
   // ======================================================
   // Production:
-  // NEXT_PUBLIC_API_URL is set in Vercel Environment Variables.
+  // NEXT_PUBLIC_API_URL should be:
   //
-  // Local development:
-  // If the environment variable is not present,
-  // it falls back to localhost:5001.
+  // https://top1squad-1.onrender.com
+  //
+  // If Vercel environment variable is missing,
+  // use the deployed Render backend instead of localhost.
   // ======================================================
 
-  const API_URL =
-    process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+  const API_URL = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    "https://top1squad-1.onrender.com"
+  ).replace(/\/+$/, "");
 
   // ======================================================
   // LOAD REGISTRATION SESSION
@@ -122,8 +125,11 @@ export default function VerifyPage() {
 
           headers: {
             "Content-Type": "application/json",
+            Accept: "application/json",
           },
 
+          // IMPORTANT:
+          // Send cookies/session credentials.
           credentials: "include",
 
           body: JSON.stringify({
@@ -154,7 +160,8 @@ export default function VerifyPage() {
 
       if (!response.ok) {
         throw new Error(
-          data.message || "OTP verification failed."
+          data.message ||
+            "OTP verification failed."
         );
       }
 
@@ -197,6 +204,7 @@ export default function VerifyPage() {
       setTimeout(() => {
         router.push("/profile");
       }, 800);
+
     } catch (error) {
       console.error(
         "OTP verification error:",
@@ -209,7 +217,7 @@ export default function VerifyPage() {
 
       if (error instanceof TypeError) {
         setError(
-          "Cannot connect to the backend. Please try again."
+          "Cannot connect to the backend. Please check your Render backend URL and CORS settings."
         );
       }
 
@@ -295,6 +303,7 @@ export default function VerifyPage() {
             <div className="flex h-full flex-col">
 
               <div>
+
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a5b4fc]">
                   Almost there
                 </p>
@@ -310,6 +319,7 @@ export default function VerifyPage() {
                   Confirm your mobile number to complete
                   your registration.
                 </p>
+
               </div>
 
               <div className="mt-10 space-y-4">
@@ -394,6 +404,7 @@ export default function VerifyPage() {
               </div>
 
             </div>
+
           </aside>
 
           {/* ==================================================
@@ -486,6 +497,7 @@ export default function VerifyPage() {
               <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#e5e8ef] pt-4">
 
                 <div>
+
                   <p className="text-[10px] text-[#929bad]">
                     Username
                   </p>
@@ -493,9 +505,11 @@ export default function VerifyPage() {
                   <p className="mt-1 truncate text-xs font-semibold text-[#39445a]">
                     {username || "—"}
                   </p>
+
                 </div>
 
                 <div>
+
                   <p className="text-[10px] text-[#929bad]">
                     Game
                   </p>
@@ -503,6 +517,7 @@ export default function VerifyPage() {
                   <p className="mt-1 truncate text-xs font-semibold text-[#4f46e5]">
                     {game || "—"}
                   </p>
+
                 </div>
 
               </div>
