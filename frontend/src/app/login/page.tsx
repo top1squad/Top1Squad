@@ -1,24 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ======================================================
 // PRODUCTION API CONFIG
-// ======================================================
-//
-// IMPORTANT:
-// Replace this with your DEPLOYED EXPRESS BACKEND URL.
-//
-// Example:
-// https://top1squad-backend.onrender.com
-//
-// Do NOT use:
-// http://localhost:5001
-//
-// in production.
-//
 // ======================================================
 
 const API_URL =
@@ -56,10 +43,10 @@ type MeResponse = {
 };
 
 // ======================================================
-// PAGE
+// LOGIN PAGE CONTENT
 // ======================================================
 
-export default function LoginPage() {
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -575,5 +562,27 @@ export default function LoginPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// ======================================================
+// PAGE WITH SUSPENSE
+// ======================================================
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-zinc-950 text-white">
+          <div className="flex min-h-screen items-center justify-center">
+            <p className="text-zinc-500">
+              Loading login...
+            </p>
+          </div>
+        </main>
+      }
+    >
+      <LoginPageContent />
+    </Suspense>
   );
 }

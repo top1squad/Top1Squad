@@ -13,7 +13,7 @@ import Link from "next/link";
 // ======================================================
 
 const API_URL = (
-  process.env.NEXT_PUBLIC_API_URL ||""
+  process.env.NEXT_PUBLIC_API_URL || ""
 ).replace(/\/$/, "");
 
 // ======================================================
@@ -140,13 +140,18 @@ function getTournamentTypeLabel(
   tournament: Tournament | null,
   registration?: Registration | null
 ): string {
-  const type = getTournamentType(tournament, registration);
+  const type = getTournamentType(
+    tournament,
+    registration
+  );
 
   switch (type) {
     case "tdm":
       return "TDM";
+
     case "clash":
       return "Squad Clash";
+
     default:
       return "Tournament";
   }
@@ -172,17 +177,21 @@ function normalizePlayer(
 
   return {
     _id: safeString(player?._id),
+
     user:
       player?.user ||
       player?.userId ||
       null,
+
     userId:
       player?.userId ||
       player?.user ||
       null,
+
     slot:
       Number(player?.slot) ||
       index + 1,
+
     uid: safeString(
       player?.uid ||
         player?.gameUid ||
@@ -190,21 +199,25 @@ function normalizePlayer(
         player?.playerId ||
         player?.gameId
     ),
+
     gameUid: safeString(
       player?.gameUid ||
         player?.uid ||
         player?.playerUid
     ),
+
     name:
       player?.name ||
       player?.playerName ||
       player?.username ||
       "Player",
+
     playerName:
       player?.playerName ||
       player?.name ||
       player?.username ||
       "Player",
+
     verified: Boolean(player?.verified),
   };
 }
@@ -253,28 +266,33 @@ function normalizeTournament(
 
   return {
     _id: tournamentId,
+
     name:
       t.name ||
       t.title ||
       t.tournamentName ||
       t.matchName ||
       "Tournament",
+
     game:
       t.game ||
       t.gameName ||
       registration?.game ||
       "BGMI",
+
     prize: safeNumber(
       t.prize ??
         t.prizePool ??
         t.prizeMoney ??
         0
     ),
+
     entryFee: safeNumber(
       t.entryFee ??
         t.registrationFee ??
         0
     ),
+
     maxTeams: safeNumber(
       t.maxTeams ??
         t.maxSlots ??
@@ -282,6 +300,7 @@ function normalizeTournament(
         t.totalSlots ??
         0
     ),
+
     registeredTeams: safeNumber(
       t.registeredTeams ??
         t.registeredSlots ??
@@ -289,16 +308,19 @@ function normalizeTournament(
         t.registeredPlayers ??
         0
     ),
+
     date:
       t.date ||
       t.matchDate ||
       t.startDate ||
       "",
+
     time:
       t.time ||
       t.matchTime ||
       t.startTime ||
       "",
+
     mode: safeString(
       t.mode ||
         t.type ||
@@ -306,6 +328,7 @@ function normalizeTournament(
         registration?.mode ||
         ""
     ),
+
     type: safeString(
       t.type ||
         t.tournamentType ||
@@ -313,25 +336,30 @@ function normalizeTournament(
         registration?.type ||
         ""
     ),
+
     gameType: safeString(
       t.gameType ||
         registration?.gameType ||
         ""
     ),
+
     map:
       t.map ||
       t.mapName ||
       "Map not specified",
+
     status:
       t.status ||
       t.tournamentStatus ||
       "Upcoming",
+
     roomId: safeString(
       t.roomId ||
         t.roomID ||
         t.room?.id ||
         registration?.roomId
     ),
+
     roomPassword: safeString(
       t.roomPassword ||
         t.roomPass ||
@@ -339,8 +367,10 @@ function normalizeTournament(
         t.room?.password ||
         registration?.roomPassword
     ),
+
     teamSlot,
     teamName,
+
     players: rawPlayers.map(
       (player: any, index: number) =>
         normalizePlayer(player, index)
@@ -388,7 +418,9 @@ function normalizeRegistration(
         registration?.id ||
         `${source}-${Date.now()}-${Math.random()}`
     ),
+
     tournament,
+
     playerTeamName:
       registration?.teamName ||
       registration?.playerTeamName ||
@@ -396,48 +428,62 @@ function normalizeRegistration(
       registration?.playerName ||
       tournament?.teamName ||
       "N/A",
+
     gameUid: safeString(uid),
+
     players,
+
     paymentStatus:
       registration?.paymentStatus ||
       registration?.payment?.status ||
       "Pending",
+
     registrationStatus:
       registration?.registrationStatus ||
       registration?.status ||
       "Pending",
+
     createdAt:
       registration?.createdAt ||
       new Date().toISOString(),
+
     source,
+
     tournamentId: safeString(
       registration?.tournamentId ||
         tournament?._id
     ),
+
     matchId: safeString(
       registration?.matchId ||
         registration?.match?._id
     ),
+
     teamSlot: safeString(
       registration?.teamSlot ||
         tournament?.teamSlot
     ).toUpperCase(),
+
     teamName:
       registration?.teamName ||
       tournament?.teamName ||
       "",
+
     mode:
       registration?.mode ||
       tournament?.mode ||
       "",
+
     type:
       registration?.type ||
       tournament?.type ||
       "",
+
     game:
       registration?.game ||
       tournament?.game ||
       "BGMI",
+
     adminNote:
       registration?.adminNote ||
       "",
@@ -722,37 +768,45 @@ export default function MyTournamentsPage() {
 
                     return {
                       ...registration,
+
                       tournament: {
                         ...tournament,
+
                         _id: safeString(
                           match._id ||
                             tournament._id
                         ),
+
                         name:
                           match.name ||
                           match.title ||
                           tournament.name,
+
                         game:
                           match.game ||
                           match.gameName ||
                           tournament.game,
+
                         prize: safeNumber(
                           match.prize ??
                             match.prizePool ??
                             tournament.prize
                         ),
+
                         entryFee:
                           safeNumber(
                             match.entryFee ??
                               match.registrationFee ??
                               tournament.entryFee
                           ),
+
                         maxTeams:
                           safeNumber(
                             match.maxTeams ??
                               match.maxSlots ??
                               tournament.maxTeams
                           ),
+
                         registeredTeams:
                           safeNumber(
                             match.registeredTeams ??
@@ -760,36 +814,45 @@ export default function MyTournamentsPage() {
                               match.filledSlots ??
                               tournament.registeredTeams
                           ),
+
                         date:
                           match.date ||
                           match.matchDate ||
                           tournament.date,
+
                         time:
                           match.time ||
                           match.matchTime ||
                           tournament.time,
+
                         mode:
                           match.mode ||
                           tournament.mode,
+
                         type:
                           match.type ||
                           tournament.type,
+
                         gameType:
                           match.gameType ||
                           tournament.gameType,
+
                         map:
                           match.map ||
                           match.mapName ||
                           tournament.map,
+
                         status:
                           match.status ||
                           tournament.status,
+
                         roomId:
                           safeString(
                             match.roomId ||
                               match.roomID ||
                               match.room?.id
                           ),
+
                         roomPassword:
                           safeString(
                             match.roomPassword ||
@@ -797,12 +860,15 @@ export default function MyTournamentsPage() {
                               match.password ||
                               match.room?.password
                           ),
+
                         teamSlot:
                           registration.teamSlot ||
                           tournament.teamSlot,
+
                         teamName:
                           registration.teamName ||
                           tournament.teamName,
+
                         players:
                           registration.players,
                       },
@@ -932,6 +998,7 @@ export default function MyTournamentsPage() {
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute left-[-180px] top-[-180px] h-[420px] w-[420px] rounded-full bg-indigo-600/10 blur-[120px]" />
+
         <div className="absolute right-[-180px] top-[25%] h-[420px] w-[420px] rounded-full bg-purple-600/10 blur-[120px]" />
       </div>
 
@@ -972,6 +1039,7 @@ export default function MyTournamentsPage() {
               className="inline-flex items-center justify-center rounded-xl border border-indigo-400/20 bg-indigo-500 px-6 py-3.5 text-xs font-black uppercase tracking-wide text-white shadow-[0_8px_30px_rgba(79,70,229,0.25)] transition hover:bg-indigo-400"
             >
               Browse tournaments
+
               <span className="ml-2">
                 →
               </span>
@@ -1179,7 +1247,8 @@ function TournamentRegistrationCard({
     Boolean(tournament.roomPassword);
 
   const hasRoomDetails =
-    hasRoomId && hasRoomPassword;
+    hasRoomId &&
+    hasRoomPassword;
 
   const detailsId =
     tournament._id ||
@@ -2056,7 +2125,6 @@ function EmptyTournaments() {
         competitions yet. Explore available
         tournaments and find your next match.
       </p>
-      
 
       <Link
         href="/tournaments"

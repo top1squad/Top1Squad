@@ -6,13 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 // API CONFIG
 // ======================================================
 
-const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-if (!RAW_API_URL) {
-  throw new Error(
-    "NEXT_PUBLIC_API_URL is not configured. Please add your deployed backend URL to the frontend environment variables."
-  );
-}
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const API_URL = RAW_API_URL.replace(/\/+$/, "");
 
@@ -193,11 +187,7 @@ function extractTournaments(
       );
   }
 
-  if (
-    Array.isArray(
-      data?.tournaments
-    )
-  ) {
+  if (Array.isArray(data?.tournaments)) {
     return data.tournaments
       .map(normalizeTournament)
       .filter(
@@ -208,9 +198,7 @@ function extractTournaments(
       );
   }
 
-  if (
-    Array.isArray(data?.data)
-  ) {
+  if (Array.isArray(data?.data)) {
     return data.data
       .map(normalizeTournament)
       .filter(
@@ -235,24 +223,16 @@ function extractLeaderboard(
     | null
 ): Winner[] {
   if (Array.isArray(data)) {
-    return data.map(
-      normalizeWinner
-    );
+    return data.map(normalizeWinner);
   }
 
-  if (
-    Array.isArray(
-      data?.leaderboard
-    )
-  ) {
+  if (Array.isArray(data?.leaderboard)) {
     return data.leaderboard.map(
       normalizeWinner
     );
   }
 
-  if (
-    Array.isArray(data?.data)
-  ) {
+  if (Array.isArray(data?.data)) {
     return data.data.map(
       normalizeWinner
     );
@@ -268,6 +248,12 @@ function extractLeaderboard(
 async function fetchTournaments(): Promise<
   Tournament[]
 > {
+  if (!API_URL) {
+    throw new Error(
+      "Backend URL is not configured. Please set NEXT_PUBLIC_API_URL in your deployment environment."
+    );
+  }
+
   const response = await fetch(
     `${API_URL}/api/tournaments`,
     {
@@ -283,8 +269,7 @@ async function fetchTournaments(): Promise<
     }
   );
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let data:
     | TournamentResponse
@@ -317,9 +302,7 @@ async function fetchTournaments(): Promise<
     );
   }
 
-  return extractTournaments(
-    data
-  );
+  return extractTournaments(data);
 }
 
 // ======================================================
@@ -329,6 +312,12 @@ async function fetchTournaments(): Promise<
 async function fetchLeaderboard(
   tournamentId: string
 ): Promise<Winner[]> {
+  if (!API_URL) {
+    throw new Error(
+      "Backend URL is not configured. Please set NEXT_PUBLIC_API_URL in your deployment environment."
+    );
+  }
+
   const response = await fetch(
     `${API_URL}/api/leaderboard/${tournamentId}`,
     {
@@ -344,8 +333,7 @@ async function fetchLeaderboard(
     }
   );
 
-  const text =
-    await response.text();
+  const text = await response.text();
 
   let data:
     | LeaderboardResponse
@@ -378,9 +366,7 @@ async function fetchLeaderboard(
     );
   }
 
-  return extractLeaderboard(
-    data
-  );
+  return extractLeaderboard(data);
 }
 
 // ======================================================
@@ -391,9 +377,7 @@ export default function LeaderboardPage() {
   const [
     leaderboards,
     setLeaderboards,
-  ] = useState<
-    TournamentLeaderboard[]
-  >([]);
+  ] = useState<TournamentLeaderboard[]>([]);
 
   const [
     loading,
@@ -434,9 +418,7 @@ export default function LeaderboardPage() {
         const results =
           await Promise.all(
             tournaments.map(
-              async (
-                tournament
-              ) => {
+              async (tournament) => {
                 try {
                   const leaderboard =
                     await fetchLeaderboard(
@@ -467,9 +449,7 @@ export default function LeaderboardPage() {
           results
         );
 
-        setLeaderboards(
-          results
-        );
+        setLeaderboards(results);
       } catch (err) {
         console.error(
           "LOAD LEADERBOARD ERROR:",
@@ -511,35 +491,33 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="space-y-8">
-            {[1, 2].map(
-              (item) => (
-                <div
-                  key={item}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-                >
-                  <div className="h-1 bg-blue-500/20" />
+            {[1, 2].map((item) => (
+              <div
+                key={item}
+                className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+              >
+                <div className="h-1 bg-blue-500/20" />
 
-                  <div className="p-6">
-                    <div className="animate-pulse">
-                      <div className="h-7 w-64 rounded bg-slate-200" />
+                <div className="p-6">
+                  <div className="animate-pulse">
+                    <div className="h-7 w-64 rounded bg-slate-200" />
 
-                      <div className="mt-3 h-4 w-40 rounded bg-slate-100" />
+                    <div className="mt-3 h-4 w-40 rounded bg-slate-100" />
 
-                      <div className="mt-8 grid gap-5 md:grid-cols-3">
-                        {[1, 2, 3].map(
-                          (card) => (
-                            <div
-                              key={card}
-                              className="h-56 rounded-xl bg-slate-100"
-                            />
-                          )
-                        )}
-                      </div>
+                    <div className="mt-8 grid gap-5 md:grid-cols-3">
+                      {[1, 2, 3].map(
+                        (card) => (
+                          <div
+                            key={card}
+                            className="h-56 rounded-xl bg-slate-100"
+                          />
+                        )
+                      )}
                     </div>
                   </div>
                 </div>
-              )
-            )}
+              </div>
+            ))}
           </div>
         </div>
       </main>
@@ -552,7 +530,6 @@ export default function LeaderboardPage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-50 text-slate-900">
-
       {/* BACKGROUND */}
 
       <div className="pointer-events-none fixed inset-0 -z-0 overflow-hidden">
@@ -565,9 +542,7 @@ export default function LeaderboardPage() {
           style={{
             backgroundImage:
               "linear-gradient(#2563eb 1px, transparent 1px), linear-gradient(90deg, #2563eb 1px, transparent 1px)",
-
-            backgroundSize:
-              "50px 50px",
+            backgroundSize: "50px 50px",
           }}
         />
       </div>
@@ -576,11 +551,8 @@ export default function LeaderboardPage() {
 
       <section className="relative z-10 border-b border-slate-200 bg-white/90 backdrop-blur">
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-
           <div className="flex flex-col justify-between gap-8 lg:flex-row lg:items-end">
-
             <div className="max-w-3xl">
-
               <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2">
                 <span className="h-2 w-2 rounded-full bg-blue-600" />
 
@@ -600,7 +572,6 @@ export default function LeaderboardPage() {
                 Check the winners and top-performing
                 players from our tournaments.
               </p>
-
             </div>
 
             <button
@@ -609,10 +580,7 @@ export default function LeaderboardPage() {
               disabled={loading}
               className="inline-flex w-fit items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3.5 text-sm font-bold text-slate-700 shadow-sm transition-all hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <span>
-                ↻
-              </span>
-
+              <span>↻</span>
               Refresh
             </button>
           </div>
@@ -620,7 +588,6 @@ export default function LeaderboardPage() {
           {/* STATS */}
 
           <div className="mt-10 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
-
             <StatCard
               icon="🏆"
               value={leaderboards.length}
@@ -630,10 +597,7 @@ export default function LeaderboardPage() {
             <StatCard
               icon="🥇"
               value={leaderboards.reduce(
-                (
-                  total,
-                  item
-                ) =>
+                (total, item) =>
                   total +
                   item.leaderboard.length,
                 0
@@ -653,7 +617,6 @@ export default function LeaderboardPage() {
               }
               label="Games"
             />
-
           </div>
         </div>
       </section>
@@ -661,16 +624,13 @@ export default function LeaderboardPage() {
       {/* CONTENT */}
 
       <section className="relative z-10 mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-
         {/* ERROR */}
 
         {error && (
           <div className="mx-auto mb-8 max-w-2xl overflow-hidden rounded-2xl border border-red-200 bg-white shadow-sm">
-
             <div className="h-1 bg-gradient-to-r from-red-500 to-red-100" />
 
             <div className="p-8 text-center">
-
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-red-200 bg-red-50 text-2xl text-red-600">
                 !
               </div>
@@ -690,7 +650,6 @@ export default function LeaderboardPage() {
               >
                 Try Again
               </button>
-
             </div>
           </div>
         )}
@@ -700,9 +659,7 @@ export default function LeaderboardPage() {
         {!error &&
           leaderboards.length === 0 && (
             <div className="mx-auto max-w-2xl">
-
               <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center shadow-sm sm:p-14">
-
                 <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-3xl">
                   🏆
                 </div>
@@ -715,7 +672,6 @@ export default function LeaderboardPage() {
                   There are no tournaments available
                   yet.
                 </p>
-
               </div>
             </div>
           )}
@@ -725,29 +681,20 @@ export default function LeaderboardPage() {
         {!error &&
           leaderboards.length > 0 && (
             <div className="space-y-8">
-
               {leaderboards.map(
                 ({
                   tournament,
                   leaderboard,
                 }) => (
                   <TournamentLeaderboardCard
-                    key={
-                      tournament._id
-                    }
-                    tournament={
-                      tournament
-                    }
-                    leaderboard={
-                      leaderboard
-                    }
+                    key={tournament._id}
+                    tournament={tournament}
+                    leaderboard={leaderboard}
                   />
                 )
               )}
-
             </div>
           )}
-
       </section>
     </main>
   );
@@ -768,7 +715,6 @@ function StatCard({
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white px-6 py-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md">
-
       <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-xl">
         {icon}
       </div>
@@ -780,7 +726,6 @@ function StatCard({
       <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-slate-500">
         {label}
       </p>
-
     </div>
   );
 }
@@ -798,7 +743,6 @@ function TournamentLeaderboardCard({
 }) {
   return (
     <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
       {/* BLUE ACCENT */}
 
       <div className="h-1 bg-gradient-to-r from-blue-600 via-blue-400 to-transparent" />
@@ -806,13 +750,9 @@ function TournamentLeaderboardCard({
       {/* HEADER */}
 
       <div className="border-b border-slate-100 p-6 sm:p-7">
-
         <div className="flex flex-col justify-between gap-5 md:flex-row md:items-center">
-
           <div>
-
             <div className="flex flex-wrap items-center gap-3">
-
               <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
                 {tournament.name}
               </h2>
@@ -820,30 +760,23 @@ function TournamentLeaderboardCard({
               <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">
                 {tournament.game}
               </span>
-
             </div>
 
             <p className="mt-2 text-sm text-slate-500">
               Tournament winners
             </p>
-
           </div>
 
           <TournamentStatus
-            status={
-              tournament.status
-            }
+            status={tournament.status}
           />
-
         </div>
       </div>
 
       {/* WINNERS */}
 
       {leaderboard.length === 0 ? (
-
         <div className="p-10 text-center sm:p-14">
-
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-2xl">
             🏆
           </div>
@@ -856,32 +789,22 @@ function TournamentLeaderboardCard({
             The tournament winners will appear
             here after they are announced.
           </p>
-
         </div>
-
       ) : (
-
         <div className="grid gap-5 p-6 md:grid-cols-2 lg:grid-cols-3">
-
           {[...leaderboard]
             .sort(
               (a, b) =>
                 a.rank - b.rank
             )
-            .map(
-              (winner) => (
-                <WinnerCard
-                  key={`${tournament._id}-${winner.rank}-${winner.userId || winner.username || winner.gameUid}`}
-                  winner={
-                    winner
-                  }
-                />
-              )
-            )}
-
+            .map((winner) => (
+              <WinnerCard
+                key={`${tournament._id}-${winner.rank}-${winner.userId || winner.username || winner.gameUid}`}
+                winner={winner}
+              />
+            ))}
         </div>
       )}
-
     </article>
   );
 }
@@ -896,36 +819,23 @@ function TournamentStatus({
   status: string;
 }) {
   const normalized =
-    status
-      .toLowerCase()
-      .trim();
+    status.toLowerCase().trim();
 
   let className =
     "border-slate-200 bg-slate-50 text-slate-600";
 
-  if (
-    normalized ===
-    "live"
-  ) {
+  if (normalized === "live") {
     className =
       "border-red-200 bg-red-50 text-red-600";
-  } else if (
-    normalized ===
-    "upcoming"
-  ) {
+  } else if (normalized === "upcoming") {
     className =
       "border-blue-200 bg-blue-50 text-blue-600";
-  } else if (
-    normalized ===
-    "completed"
-  ) {
+  } else if (normalized === "completed") {
     className =
       "border-emerald-200 bg-emerald-50 text-emerald-600";
   } else if (
-    normalized ===
-      "cancelled" ||
-    normalized ===
-      "canceled"
+    normalized === "cancelled" ||
+    normalized === "canceled"
   ) {
     className =
       "border-slate-200 bg-slate-50 text-slate-500";
@@ -949,10 +859,7 @@ function WinnerCard({
 }: {
   winner: Winner;
 }) {
-  const rank =
-    safeNumber(
-      winner.rank
-    );
+  const rank = safeNumber(winner.rank);
 
   const getMedal = () => {
     if (rank === 1) {
@@ -987,8 +894,7 @@ function WinnerCard({
   };
 
   const isTopThree =
-    rank >= 1 &&
-    rank <= 3;
+    rank >= 1 && rank <= 3;
 
   return (
     <div
@@ -1002,7 +908,6 @@ function WinnerCard({
           : "border-slate-200"
       }`}
     >
-
       {/* TOP ACCENT */}
 
       <div
@@ -1020,7 +925,6 @@ function WinnerCard({
       {/* POSITION */}
 
       <div className="flex items-center justify-between">
-
         <span
           className={`rounded-full px-3 py-1 text-xs font-black ${
             isTopThree
@@ -1034,13 +938,11 @@ function WinnerCard({
         <span className="text-3xl">
           {getMedal()}
         </span>
-
       </div>
 
       {/* PLAYER */}
 
       <div className="mt-6">
-
         <h3 className="truncate text-xl font-black text-slate-900">
           {winner.userName ||
             "Unknown Player"}
@@ -1051,20 +953,17 @@ function WinnerCard({
             @{winner.username}
           </p>
         )}
-
       </div>
 
       {/* DETAILS */}
 
       <div className="mt-6 space-y-4">
-
         {/* TEAM */}
 
         <WinnerDetail
           label="Team"
           value={
-            winner.teamName ||
-            "N/A"
+            winner.teamName || "N/A"
           }
         />
 
@@ -1073,14 +972,11 @@ function WinnerCard({
         <WinnerDetail
           label="Game UID"
           value={
-            winner.gameUid ||
-            "N/A"
+            winner.gameUid || "N/A"
           }
           mono
         />
-
       </div>
-
     </div>
   );
 }
@@ -1100,21 +996,17 @@ function WinnerDetail({
 }) {
   return (
     <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
-
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
         {label}
       </p>
 
       <p
         className={`mt-1 truncate text-sm font-bold text-slate-800 ${
-          mono
-            ? "font-mono"
-            : ""
+          mono ? "font-mono" : ""
         }`}
       >
         {value}
       </p>
-
     </div>
   );
 }
