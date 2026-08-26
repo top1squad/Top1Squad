@@ -73,6 +73,16 @@ console.log(
 );
 
 console.log(
+  "MONGO_URI loaded:",
+  !!process.env.MONGO_URI
+);
+
+console.log(
+  "SESSION_SECRET loaded:",
+  !!process.env.SESSION_SECRET
+);
+
+console.log(
   "HANUOTP_API_KEY loaded:",
   !!process.env.HANUOTP_API_KEY
 );
@@ -84,11 +94,6 @@ console.log(
 // ======================================================
 // PASSPORT
 // ======================================================
-
-// IMPORTANT:
-// Use the configured Passport instance.
-// This loads config/passport.js and registers
-// the "local" authentication strategy.
 
 const passport =
   require("./config/passport");
@@ -171,13 +176,6 @@ const app = express();
 // ======================================================
 // TRUST PROXY
 // ======================================================
-//
-// Important when deployed behind Render, Railway,
-// Fly.io, etc.
-//
-// This allows Express to correctly understand
-// HTTPS requests coming through a reverse proxy.
-//
 
 if (isProduction) {
   app.set("trust proxy", 1);
@@ -186,28 +184,17 @@ if (isProduction) {
 // ======================================================
 // CORS ORIGINS
 // ======================================================
-//
-// FRONTEND_URL is the primary frontend.
-// CORS_ORIGINS can contain multiple URLs.
-//
-// Example:
-//
-// FRONTEND_URL=https://myapp.vercel.app
-//
-// CORS_ORIGINS=https://admin.example.com,https://myapp.vercel.app
-//
-// Local development can use:
-//
-// FRONTEND_URL=http://localhost:3000
-//
-// ======================================================
 
 const allowedOrigins = [
   "http://localhost:3000",
   "http://localhost:3001",
   "http://localhost:5173",
   "http://localhost:5174",
+
+  // Production frontend
   FRONTEND_URL,
+
+  // Additional configured origins
   ...EXTRA_CORS_ORIGINS,
 ]
   .map((origin) =>
@@ -235,11 +222,7 @@ app.use(
       callback
     ) {
       // Allow requests without Origin.
-      //
-      // Examples:
-      // Postman
-      // curl
-      // server-to-server requests
+      // Useful for curl, Postman and server-to-server requests.
 
       if (!origin) {
         return callback(
@@ -286,6 +269,8 @@ app.use(
       "Authorization",
       "Accept",
     ],
+
+    optionsSuccessStatus: 204,
   })
 );
 
@@ -316,6 +301,12 @@ app.use(
       `[API] ${req.method} ${req.originalUrl}`
     );
 
+    console.log(
+      `[API] Origin: ${
+        req.headers.origin || "none"
+      }`
+    );
+
     next();
   }
 );
@@ -323,19 +314,6 @@ app.use(
 // ======================================================
 // SESSION
 // ======================================================
-//
-// Cookie configuration comes from .env.
-//
-// COOKIE_DOMAIN:
-// Development:
-// COOKIE_DOMAIN=
-//
-// Production with same parent domain:
-// COOKIE_DOMAIN=.example.com
-//
-// If frontend/backend are on completely different
-// domains, leave COOKIE_DOMAIN empty.
-//
 
 const sessionCookie = {
   httpOnly: true,
@@ -354,16 +332,7 @@ const sessionCookie = {
     7,
 };
 
-// Only add domain when it is actually configured.
-//
-// This is important because:
-//
-// domain: undefined
-//
-// is safer for localhost than:
-//
-// domain: "localhost"
-//
+// Only set domain when explicitly configured.
 
 if (COOKIE_DOMAIN) {
   sessionCookie.domain =
@@ -406,16 +375,6 @@ app.use(
 // ======================================================
 // PASSPORT
 // ======================================================
-//
-// IMPORTANT ORDER:
-//
-// session()
-// passport.initialize()
-// passport.session()
-//
-// passport.session() must come after
-// express-session.
-//
 
 app.use(
   passport.initialize()
@@ -445,19 +404,40 @@ mongoose
     );
 
     console.log(
+      `Host: ${mongoose.connection.host}`
+    );
+
+    console.log(
       "========================================"
     );
   })
   .catch((error) => {
     console.error(
+      "========================================"
+    );
+
+    console.error(
       "MongoDB connection error:",
       error.message
+    );
+
+    console.error(
+      "========================================"
     );
   });
 
 // ======================================================
 // DATABASE EVENTS
 // ======================================================
+
+mongoose.connection.on(
+  "connected",
+  () => {
+    console.log(
+      "MongoDB connection established."
+    );
+  }
+);
 
 mongoose.connection.on(
   "error",
@@ -494,10 +474,16 @@ app.get(
       server:
         "Backend",
 
-      port: PORT,
+      port:
+        PORT,
 
       environment:
         NODE_ENV,
+
+      database:
+        mongoose.connection.readyState === 1
+          ? "connected"
+          : "disconnected",
     });
   }
 );
@@ -526,9 +512,32 @@ app.get(
       databaseState:
         dbState,
 
+      databaseName:
+        mongoose.connection.name ||
+        null,
+
+      databaseHost:
+        mongoose.connection.host ||
+        null,
+
+      environment:
+        NODE_ENV,
+
       timestamp:
         new Date().toISOString(),
     });
+  }
+);
+
+// ======================================================
+// FAVICON
+// IMPORTANT: MUST COME BEFORE 404 MIDDLEWARE
+// ======================================================
+
+app.get(
+  "/favicon.ico",
+  (req, res) => {
+    return res.status(204).end();
   }
 );
 
@@ -591,13 +600,6 @@ app.use(
 // ======================================================
 // TDM / SQUAD CLASH MATCHES
 // ======================================================
-//
-// SAME MODEL
-// SAME COLLECTION
-//
-// type = "TDM"
-// type = "Squad Clash"
-//
 
 app.use(
   "/api/squad-clash-tdm",
@@ -607,25 +609,6 @@ app.use(
 // ======================================================
 // TDM / SQUAD CLASH USER REGISTRATIONS
 // ======================================================
-//
-// POST
-// /api/squad-clash-tdm/registrations
-//
-// GET
-// /api/squad-clash-tdm/registrations/my
-//
-// GET
-// /api/squad-clash-tdm/registrations/validate-player-uid
-//
-// GET
-// /api/squad-clash-tdm/registrations/:tournamentId/slots
-//
-// GET
-// /api/squad-clash-tdm/registrations/registration/:id
-//
-// PATCH
-// /api/squad-clash-tdm/registrations/:id/cancel
-//
 
 app.use(
   "/api/squad-clash-tdm/registrations",
@@ -635,10 +618,6 @@ app.use(
 // ======================================================
 // MATCH REGISTRATION COMPATIBILITY
 // ======================================================
-//
-// GET
-// /api/squad-clash-tdm/:matchId/registrations
-//
 
 app.use(
   "/api/squad-clash-tdm/:matchId/registrations",
@@ -648,16 +627,6 @@ app.use(
 // ======================================================
 // ADMIN TDM / SQUAD CLASH REGISTRATIONS
 // ======================================================
-//
-// GET
-// /api/admin/squad-clash-tdm/registrations/:tournamentId
-//
-// PATCH
-// /api/admin/squad-clash-tdm/registrations/:registrationId
-//
-// DELETE
-// /api/admin/squad-clash-tdm/registrations/:registrationId
-//
 
 app.use(
   "/api/admin/squad-clash-tdm",
@@ -677,9 +646,6 @@ app.use(
 // ======================================================
 // PROFILE COMPATIBILITY ENDPOINT
 // ======================================================
-//
-// GET /api/profile
-//
 
 app.get(
   "/api/profile",
