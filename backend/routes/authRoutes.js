@@ -37,24 +37,15 @@ function generateOtp() {
 // ======================================================
 // GET REGISTRATION SESSION
 // ======================================================
-//
-// IMPORTANT:
-//
-// Frontend (Vercel) and backend (Render) are different
-// domains. Because of this, the browser may not always
-// send the original session cookie during /verify.
-//
-// We first check req.session normally.
-//
-// If the cookie/session is not available, we recover the
-// registration session directly from the session store
-// using registrationId.
-//
+// Supports frontend and backend running on different domains.
+// First checks the current session.
+// If unavailable, recovers the registration session from the
+// session store using registrationId.
 // ======================================================
 
 function getRegistrationSession(req, registrationId) {
   return new Promise((resolve, reject) => {
-    // First try the normal current session.
+    // Normal session
     if (
       req.session &&
       req.session.pendingRegistration &&
@@ -67,7 +58,7 @@ function getRegistrationSession(req, registrationId) {
       });
     }
 
-    // Recover session from session store.
+    // Session-store recovery
     if (
       !registrationId ||
       !req.sessionStore ||
@@ -221,7 +212,7 @@ router.post("/register", async (req, res) => {
     }
 
     if (
-      !/^[\w.-]+@[\w.-]+$/.test(
+      !/^[\w\.-]+@[\w\.-]+$/.test(
         String(upiId).trim()
       )
     ) {
@@ -425,19 +416,18 @@ router.post("/register", async (req, res) => {
       console.log("Mobile:", cleanMobile);
 
       try {
-        const response =
-          await axios.get(
-            "https://api.hanuotp.in/sms-otp.php",
-            {
-              params: {
-                number: cleanMobile,
-                OTP: otp,
-                apikey: hanuOtpApiKey,
-                templatesid: "default",
-              },
-              timeout: 15000,
-            }
-          );
+        const response = await axios.get(
+          "https://api.hanuotp.in/sms-otp.php",
+          {
+            params: {
+              number: cleanMobile,
+              OTP: otp,
+              apikey: hanuOtpApiKey,
+              templatesid: "default",
+            },
+            timeout: 15000,
+          }
+        );
 
         console.log(
           "HanuOTP response:",
@@ -503,12 +493,9 @@ router.post("/register", async (req, res) => {
         });
       } catch (otpError) {
         console.error(
-          "HanuOTP request error:"
-        );
-
-        console.error(
+          "HanuOTP request error:",
           otpError.response?.data ||
-          otpError.message
+            otpError.message
         );
 
         delete req.session.pendingRegistration;
@@ -537,7 +524,7 @@ router.post("/register", async (req, res) => {
 });
 
 // ======================================================
-// VERIFY OTP
+// VERIFY REGISTRATION OTP
 // POST /api/auth/verify
 // ======================================================
 
@@ -552,7 +539,6 @@ router.post("/verify", async (req, res) => {
     console.log("======================================");
     console.log("OTP VERIFICATION REQUEST");
     console.log("======================================");
-
     console.log(
       "Registration ID received:",
       registrationId
@@ -589,18 +575,7 @@ router.post("/verify", async (req, res) => {
     }
 
     // ==================================================
-    // FIND REGISTRATION SESSION
-    // ==================================================
-    //
-    // FIX:
-    //
-    // Do NOT depend only on req.session.
-    //
-    // If the frontend does not send the original
-    // connect.sid cookie, recover the registration
-    // session from MongoDB/session store using
-    // registrationId.
-    //
+    // GET REGISTRATION SESSION
     // ==================================================
 
     const registrationSession =
@@ -713,7 +688,6 @@ router.post("/verify", async (req, res) => {
       registrationSession.session.pendingRegistration =
         registration;
 
-      // Normal session.
       if (
         registrationSession.currentSession
       ) {
@@ -725,7 +699,6 @@ router.post("/verify", async (req, res) => {
         });
       }
 
-      // Recovered session.
       return req.sessionStore.set(
         registrationSession.sessionId,
         registrationSession.session,
@@ -827,37 +800,25 @@ router.post("/verify", async (req, res) => {
     const user = new User({
       fullName:
         registration.fullName,
-
       username:
         registration.username,
-
       mobile:
         registration.mobile,
-
       email:
         registration.email,
-
       game:
         registration.game,
-
       gameUid:
         registration.gameUid,
-
       upiId:
         registration.upiId,
-
       termsAccepted:
         registration.termsAccepted,
-
       role: "user",
     });
 
     // ==================================================
     // CREATE PASSWORD
-    // ==================================================
-    //
-    // Passport-Local-Mongoose hashes the password.
-    //
     // ==================================================
 
     const registeredUser =
@@ -867,33 +828,35 @@ router.post("/verify", async (req, res) => {
       );
 
     // ==================================================
-    // REMOVE TEMPORARY REGISTRATION
+    // REMOVE ONLY TEMPORARY REGISTRATION
+    // ==================================================
+    // Do NOT destroy the complete session.
+    // Passport can then create the login session.
     // ==================================================
 
-    delete registrationSession.session
-      .pendingRegistration;
-
-    // If this is the current browser session,
-    // save normally.
-    //
-    // If this was recovered from the store,
-    // update that stored session before login.
     if (
-      !registrationSession.currentSession
+      registrationSession.currentSession
     ) {
-      await new Promise((resolve, reject) => {
-        req.sessionStore.set(
-          registrationSession.sessionId,
-          registrationSession.session,
-          (storeError) => {
-            if (storeError) {
-              return reject(storeError);
-            }
+      delete req.session.pendingRegistration;
+    } else {
+      delete registrationSession.session
+        .pendingRegistration;
 
-            resolve();
-          }
-        );
-      });
+      await new Promise(
+        (resolve, reject) => {
+          req.sessionStore.set(
+            registrationSession.sessionId,
+            registrationSession.session,
+            (error) => {
+              if (error) {
+                return reject(error);
+              }
+
+              resolve();
+            }
+          );
+        }
+      );
     }
 
     // ==================================================
@@ -970,10 +933,6 @@ router.post("/verify", async (req, res) => {
       "OTP verification error:",
       error
     );
-
-    // ==================================================
-    // DUPLICATE KEY ERROR
-    // ==================================================
 
     if (
       error &&
@@ -1320,7 +1279,7 @@ router.patch(
 
         if (
           cleanUpiId &&
-          !/^[\w.-]+@[\w.-]+$/.test(
+          !/^[\w\.-]+@[\w\.-]+$/.test(
             cleanUpiId
           )
         ) {
@@ -1482,6 +1441,371 @@ router.patch(
       );
 
       return next(error);
+    }
+  }
+);
+
+// ======================================================
+// FORGOT PASSWORD - SEND OTP
+// POST /api/auth/forgot-password/send-otp
+// ======================================================
+
+router.post(
+  "/forgot-password/send-otp",
+  async (req, res) => {
+    try {
+      const { mobile } = req.body;
+
+      if (
+        !mobile ||
+        !/^[6-9][0-9]{9}$/.test(
+          String(mobile).trim()
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid 10-digit mobile number.",
+        });
+      }
+
+      const cleanMobile =
+        String(mobile).trim();
+
+      const user =
+        await User.findOne({
+          mobile: cleanMobile,
+        });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "No account found with this mobile number.",
+        });
+      }
+
+      const hanuOtpApiKey =
+        process.env.HANUOTP_API_KEY;
+
+      if (!hanuOtpApiKey) {
+        console.error(
+          "HANUOTP_API_KEY is missing."
+        );
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "OTP service is not configured.",
+        });
+      }
+
+      const otp =
+        generateOtp();
+
+      req.session.forgotPassword = {
+        userId: user._id.toString(),
+        mobile: cleanMobile,
+        otp: otp,
+        otpExpiresAt:
+          Date.now() + 10 * 60 * 1000,
+        otpAttempts: 0,
+        verified: false,
+      };
+
+      req.session.save(
+        async (sessionError) => {
+          if (sessionError) {
+            console.error(
+              "Forgot password session error:",
+              sessionError
+            );
+
+            return res.status(500).json({
+              success: false,
+              message:
+                "Unable to start password reset.",
+            });
+          }
+
+          try {
+            const response =
+              await axios.get(
+                "https://api.hanuotp.in/sms-otp.php",
+                {
+                  params: {
+                    number:
+                      cleanMobile,
+                    OTP: otp,
+                    apikey:
+                      hanuOtpApiKey,
+                    templatesid:
+                      "default",
+                  },
+                  timeout: 15000,
+                }
+              );
+
+            console.log(
+              "Forgot password HanuOTP:",
+              response.data
+            );
+
+            if (
+              response.data &&
+              response.data.status ===
+                "success"
+            ) {
+              return res.status(200).json({
+                success: true,
+                message:
+                  "OTP sent successfully.",
+              });
+            }
+
+            delete req.session
+              .forgotPassword;
+
+            return req.session.save(() => {
+              return res.status(400).json({
+                success: false,
+                message:
+                  response.data?.message ||
+                  "Unable to send OTP. Please try again.",
+              });
+            });
+          } catch (otpError) {
+            console.error(
+              "Forgot password OTP error:",
+              otpError.response?.data ||
+                otpError.message
+            );
+
+            delete req.session
+              .forgotPassword;
+
+            return req.session.save(() => {
+              return res.status(502).json({
+                success: false,
+                message:
+                  "Unable to send OTP. Please try again.",
+              });
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error(
+        "Forgot password send OTP error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to send OTP.",
+      });
+    }
+  }
+);
+
+// ======================================================
+// FORGOT PASSWORD - VERIFY OTP
+// POST /api/auth/forgot-password/verify-otp
+// ======================================================
+
+router.post(
+  "/forgot-password/verify-otp",
+  async (req, res) => {
+    try {
+      const { mobileOtp } =
+        req.body;
+
+      if (!mobileOtp) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "OTP is required.",
+        });
+      }
+
+      const cleanOtp =
+        String(mobileOtp).trim();
+
+      if (!/^\d{6}$/.test(cleanOtp)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid 6-digit OTP.",
+        });
+      }
+
+      const resetData =
+        req.session.forgotPassword;
+
+      if (!resetData) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Password reset session expired. Please request a new OTP.",
+        });
+      }
+
+      if (
+        resetData.otpExpiresAt <
+        Date.now()
+      ) {
+        delete req.session
+          .forgotPassword;
+
+        return req.session.save(() => {
+          return res.status(400).json({
+            success: false,
+            message:
+              "OTP has expired. Please request a new OTP.",
+          });
+        });
+      }
+
+      if (
+        resetData.otpAttempts >= 5
+      ) {
+        delete req.session
+          .forgotPassword;
+
+        return req.session.save(() => {
+          return res.status(429).json({
+            success: false,
+            message:
+              "Maximum OTP attempts exceeded. Please request a new OTP.",
+          });
+        });
+      }
+
+      if (
+        String(resetData.otp) !==
+        cleanOtp
+      ) {
+        resetData.otpAttempts =
+          (resetData.otpAttempts || 0) +
+          1;
+
+        req.session.forgotPassword =
+          resetData;
+
+        return req.session.save(() => {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Invalid OTP.",
+          });
+        });
+      }
+
+      req.session.forgotPassword.verified =
+        true;
+
+      return req.session.save(() => {
+        return res.status(200).json({
+          success: true,
+          message:
+            "OTP verified successfully.",
+        });
+      });
+    } catch (error) {
+      console.error(
+        "Forgot password verify OTP error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "OTP verification failed.",
+      });
+    }
+  }
+);
+
+// ======================================================
+// FORGOT PASSWORD - RESET PASSWORD
+// POST /api/auth/forgot-password/reset
+// ======================================================
+
+router.post(
+  "/forgot-password/reset",
+  async (req, res) => {
+    try {
+      const { password } =
+        req.body;
+
+      if (
+        !password ||
+        String(password).length < 6
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password must be at least 6 characters.",
+        });
+      }
+
+      const resetData =
+        req.session.forgotPassword;
+
+      if (
+        !resetData ||
+        !resetData.verified
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please verify OTP first.",
+        });
+      }
+
+      const user =
+        await User.findById(
+          resetData.userId
+        );
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "User not found.",
+        });
+      }
+
+      // Passport-Local-Mongoose
+      // password update
+      user.setPassword(
+        String(password)
+      );
+
+      await user.save();
+
+      delete req.session
+        .forgotPassword;
+
+      return req.session.save(() => {
+        return res.status(200).json({
+          success: true,
+          message:
+            "Password reset successfully.",
+        });
+      });
+    } catch (error) {
+      console.error(
+        "Forgot password reset error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message:
+          "Unable to reset password.",
+      });
     }
   }
 );
