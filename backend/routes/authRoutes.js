@@ -2,7 +2,6 @@ const express = require("express");
 const axios = require("axios");
 const crypto = require("crypto");
 const passport = require("passport");
-
 const User = require("../models/User");
 
 const router = express.Router();
@@ -29,302 +28,386 @@ function getUserData(user) {
 }
 
 function generateOtp() {
-  return Math.floor(100000 + Math.random() * 900000).toString();
+  return Math.floor(
+    100000 + Math.random() * 900000
+  ).toString();
 }
 
 function generateResetToken() {
-  return crypto.randomBytes(32).toString("hex");
+  return crypto
+    .randomBytes(32)
+    .toString("hex");
 }
 
 function saveSession(req) {
-  return new Promise((resolve, reject) => {
-    if (!req.session) {
-      return reject(new Error("Session is not available."));
-    }
-
-    req.session.save((error) => {
-      if (error) {
-        return reject(error);
+  return new Promise(
+    (resolve, reject) => {
+      if (!req.session) {
+        return reject(
+          new Error(
+            "Session is not available."
+          )
+        );
       }
 
-      resolve();
-    });
-  });
+      req.session.save((error) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve();
+      });
+    }
+  );
 }
 
 // ======================================================
 // REGISTRATION SESSION HELPERS
 // ======================================================
 
-function getRegistrationSession(req, registrationId) {
-  return new Promise((resolve, reject) => {
-    if (!registrationId) {
-      return resolve(null);
-    }
+function getRegistrationSession(
+  req,
+  registrationId
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!registrationId) {
+        return resolve(null);
+      }
 
-    // --------------------------------------------------
-    // Current session
-    // --------------------------------------------------
+      // ------------------------------------------------
+      // Current session
+      // ------------------------------------------------
 
-    if (
-      req.session &&
-      req.sessionID === String(registrationId) &&
-      req.session.pendingRegistration
-    ) {
-      return resolve({
-        session: req.session,
-        sessionId: req.sessionID,
-        currentSession: true,
-      });
-    }
-
-    // --------------------------------------------------
-    // Session store recovery
-    // --------------------------------------------------
-
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.get !== "function"
-    ) {
-      return resolve(null);
-    }
-
-    req.sessionStore.get(
-      String(registrationId),
-      (error, storedSession) => {
-        if (error) {
-          console.error(
-            "Registration session store error:",
-            error
-          );
-
-          return reject(error);
-        }
-
-        if (
-          !storedSession ||
-          !storedSession.pendingRegistration
-        ) {
-          return resolve(null);
-        }
-
+      if (
+        req.session &&
+        req.sessionID ===
+          String(registrationId) &&
+        req.session.pendingRegistration
+      ) {
         return resolve({
-          session: storedSession,
-          sessionId: String(registrationId),
-          currentSession: false,
+          session: req.session,
+          sessionId: req.sessionID,
+          currentSession: true,
         });
       }
-    );
-  });
+
+      // ------------------------------------------------
+      // Session store recovery
+      // ------------------------------------------------
+
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.get !==
+          "function"
+      ) {
+        return resolve(null);
+      }
+
+      req.sessionStore.get(
+        String(registrationId),
+        (
+          error,
+          storedSession
+        ) => {
+          if (error) {
+            console.error(
+              "Registration session store error:",
+              error
+            );
+
+            return reject(error);
+          }
+
+          if (
+            !storedSession ||
+            !storedSession.pendingRegistration
+          ) {
+            return resolve(null);
+          }
+
+          return resolve({
+            session: storedSession,
+            sessionId:
+              String(registrationId),
+            currentSession: false,
+          });
+        }
+      );
+    }
+  );
 }
 
-function saveRegistrationSession(req, registrationSession) {
-  return new Promise((resolve, reject) => {
-    if (!registrationSession) {
-      return reject(
-        new Error("Registration session missing.")
-      );
-    }
-
-    // Current session
-    if (registrationSession.currentSession) {
-      return req.session.save((error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
-      });
-    }
-
-    // Recovered session
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.set !== "function"
-    ) {
-      return reject(
-        new Error("Session store is not available.")
-      );
-    }
-
-    req.sessionStore.set(
-      registrationSession.sessionId,
-      registrationSession.session,
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
+function saveRegistrationSession(
+  req,
+  registrationSession
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!registrationSession) {
+        return reject(
+          new Error(
+            "Registration session missing."
+          )
+        );
       }
-    );
-  });
+
+      // Current session
+      if (
+        registrationSession.currentSession
+      ) {
+        return req.session.save(
+          (error) => {
+            if (error) {
+              return reject(error);
+            }
+
+            resolve();
+          }
+        );
+      }
+
+      // Recovered session
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.set !==
+          "function"
+      ) {
+        return reject(
+          new Error(
+            "Session store is not available."
+          )
+        );
+      }
+
+      req.sessionStore.set(
+        registrationSession.sessionId,
+        registrationSession.session,
+        (error) => {
+          if (error) {
+            return reject(error);
+          }
+
+          resolve();
+        }
+      );
+    }
+  );
 }
 
-function destroyRegistrationSession(req, registrationSession) {
-  return new Promise((resolve, reject) => {
-    if (!registrationSession) {
-      return resolve();
-    }
+function destroyRegistrationSession(
+  req,
+  registrationSession
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!registrationSession) {
+        return resolve();
+      }
 
-    // Current session
-    if (registrationSession.currentSession) {
-      return req.session.destroy((error) => {
-        if (error) {
-          return reject(error);
+      // Current session
+      if (
+        registrationSession.currentSession
+      ) {
+        return req.session.destroy(
+          (error) => {
+            if (error) {
+              return reject(error);
+            }
+
+            resolve();
+          }
+        );
+      }
+
+      // Recovered session
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.destroy !==
+          "function"
+      ) {
+        return reject(
+          new Error(
+            "Session store is not available."
+          )
+        );
+      }
+
+      req.sessionStore.destroy(
+        registrationSession.sessionId,
+        (error) => {
+          if (error) {
+            return reject(error);
+          }
+
+          resolve();
         }
-
-        resolve();
-      });
-    }
-
-    // Recovered session
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.destroy !== "function"
-    ) {
-      return reject(
-        new Error("Session store is not available.")
       );
     }
-
-    req.sessionStore.destroy(
-      registrationSession.sessionId,
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
-      }
-    );
-  });
+  );
 }
 
 // ======================================================
-// FORGOT PASSWORD TOKEN SESSION HELPERS
+// FORGOT PASSWORD RESET SESSION HELPERS
 // ======================================================
 
-function getResetSession(req, resetToken) {
-  return new Promise((resolve, reject) => {
-    if (!resetToken) {
-      return resolve(null);
-    }
+function getResetSession(
+  req,
+  resetToken
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!resetToken) {
+        return resolve(null);
+      }
 
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.get !== "function"
-    ) {
-      return reject(
-        new Error("Session store is not available.")
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.get !==
+          "function"
+      ) {
+        return reject(
+          new Error(
+            "Session store is not available."
+          )
+        );
+      }
+
+      req.sessionStore.get(
+        String(resetToken),
+        (
+          error,
+          storedSession
+        ) => {
+          if (error) {
+            console.error(
+              "Reset session store get error:",
+              error
+            );
+
+            return reject(error);
+          }
+
+          if (!storedSession) {
+            return resolve(null);
+          }
+
+          if (
+            !storedSession.forgotPassword
+          ) {
+            return resolve(null);
+          }
+
+          return resolve({
+            session: storedSession,
+            sessionId:
+              String(resetToken),
+          });
+        }
       );
     }
-
-    req.sessionStore.get(
-      String(resetToken),
-      (error, storedSession) => {
-        if (error) {
-          console.error(
-            "Reset session store get error:",
-            error
-          );
-
-          return reject(error);
-        }
-
-        if (!storedSession) {
-          return resolve(null);
-        }
-
-        if (!storedSession.forgotPassword) {
-          return resolve(null);
-        }
-
-        return resolve({
-          session: storedSession,
-          sessionId: String(resetToken),
-        });
-      }
-    );
-  });
+  );
 }
 
-function saveResetSession(req, resetSession) {
-  return new Promise((resolve, reject) => {
-    if (!resetSession) {
-      return reject(
-        new Error("Reset session missing.")
-      );
-    }
-
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.set !== "function"
-    ) {
-      return reject(
-        new Error("Session store is not available.")
-      );
-    }
-
-    req.sessionStore.set(
-      resetSession.sessionId,
-      resetSession.session,
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
+function saveResetSession(
+  req,
+  resetSession
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!resetSession) {
+        return reject(
+          new Error(
+            "Reset session missing."
+          )
+        );
       }
-    );
-  });
+
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.set !==
+          "function"
+      ) {
+        return reject(
+          new Error(
+            "Session store is not available."
+          )
+        );
+      }
+
+      req.sessionStore.set(
+        resetSession.sessionId,
+        resetSession.session,
+        (error) => {
+          if (error) {
+            return reject(error);
+          }
+
+          resolve();
+        }
+      );
+    }
+  );
 }
 
-function destroyResetSession(req, resetSession) {
-  return new Promise((resolve, reject) => {
-    if (!resetSession) {
-      return resolve();
-    }
+function destroyResetSession(
+  req,
+  resetSession
+) {
+  return new Promise(
+    (resolve, reject) => {
+      if (!resetSession) {
+        return resolve();
+      }
 
-    if (
-      !req.sessionStore ||
-      typeof req.sessionStore.destroy !== "function"
-    ) {
-      return reject(
-        new Error("Session store is not available.")
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.destroy !==
+          "function"
+      ) {
+        return reject(
+          new Error(
+            "Session store is not available."
+          )
+        );
+      }
+
+      req.sessionStore.destroy(
+        resetSession.sessionId,
+        (error) => {
+          if (error) {
+            return reject(error);
+          }
+
+          resolve();
+        }
       );
     }
-
-    req.sessionStore.destroy(
-      resetSession.sessionId,
-      (error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
-      }
-    );
-  });
+  );
 }
 
 // ======================================================
 // GET RESET TOKEN FROM REQUEST
 // ======================================================
 
-function getResetTokenFromRequest(req) {
+function getResetTokenFromRequest(
+  req
+) {
   const bodyToken =
-    req.body && req.body.resetToken
+    req.body &&
+    req.body.resetToken
       ? req.body.resetToken
       : null;
 
   const queryToken =
-    req.query && req.query.resetToken
+    req.query &&
+    req.query.resetToken
       ? req.query.resetToken
       : null;
 
   const headerToken =
-    req.headers["x-reset-token"] || null;
+    req.headers["x-reset-token"] ||
+    null;
 
   return String(
     bodyToken ||
@@ -339,785 +422,904 @@ function getResetTokenFromRequest(req) {
 // POST /api/auth/register
 // ======================================================
 
-router.post("/register", async (req, res) => {
-  try {
-    const {
-      fullName,
-      username,
-      mobile,
-      email,
-      password,
-      game,
-      gameUid,
-      upiId,
-      termsAccepted,
-    } = req.body;
+router.post(
+  "/register",
+  async (req, res) => {
+    try {
+      const {
+        fullName,
+        username,
+        mobile,
+        email,
+        password,
+        game,
+        gameUid,
+        upiId,
+        termsAccepted,
+      } = req.body;
 
-    console.log("");
-    console.log("======================================");
-    console.log("REGISTRATION REQUEST");
-    console.log("======================================");
+      console.log("");
+      console.log(
+        "======================================"
+      );
+      console.log(
+        "REGISTRATION REQUEST"
+      );
+      console.log(
+        "======================================"
+      );
 
-    // ==================================================
-    // VALIDATION
-    // ==================================================
+      // ==================================================
+      // VALIDATION
+      // ==================================================
 
-    if (!fullName || !String(fullName).trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Full name is required.",
-      });
-    }
+      if (
+        !fullName ||
+        !String(fullName).trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Full name is required.",
+        });
+      }
 
-    if (!username || !String(username).trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Username is required.",
-      });
-    }
+      if (
+        !username ||
+        !String(username).trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Username is required.",
+        });
+      }
 
-    if (
-      !mobile ||
-      !/^[6-9][0-9]{9}$/.test(
-        String(mobile).trim()
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Please enter a valid 10-digit mobile number.",
-      });
-    }
+      if (
+        !mobile ||
+        !/^[6-9][0-9]{9}$/.test(
+          String(mobile).trim()
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid 10-digit mobile number.",
+        });
+      }
 
-    if (!email || !String(email).trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Email is required.",
-      });
-    }
+      if (
+        !email ||
+        !String(email).trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Email is required.",
+        });
+      }
 
-    if (
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-        String(email).trim()
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Please enter a valid email address.",
-      });
-    }
+      if (
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+          String(email).trim()
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid email address.",
+        });
+      }
 
-    if (!password) {
-      return res.status(400).json({
-        success: false,
-        message: "Password is required.",
-      });
-    }
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password is required.",
+        });
+      }
 
-    if (String(password).length < 6) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Password must be at least 6 characters.",
-      });
-    }
+      if (
+        String(password).length < 6
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password must be at least 6 characters.",
+        });
+      }
 
-    if (!game) {
-      return res.status(400).json({
-        success: false,
-        message: "Game is required.",
-      });
-    }
+      if (!game) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Game is required.",
+        });
+      }
 
-    if (!["BGMI", "Free Fire"].includes(game)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Game must be BGMI or Free Fire.",
-      });
-    }
+      if (
+        !["BGMI", "Free Fire"].includes(
+          game
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Game must be BGMI or Free Fire.",
+        });
+      }
 
-    if (!gameUid || !String(gameUid).trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "Game UID is required.",
-      });
-    }
+      if (
+        !gameUid ||
+        !String(gameUid).trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Game UID is required.",
+        });
+      }
 
-    if (!upiId || !String(upiId).trim()) {
-      return res.status(400).json({
-        success: false,
-        message: "UPI ID is required.",
-      });
-    }
+      if (
+        !upiId ||
+        !String(upiId).trim()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "UPI ID is required.",
+        });
+      }
 
-    if (
-      !/^[\w.-]+@[\w.-]+$/.test(
-        String(upiId).trim()
-      )
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Please enter a valid UPI ID.",
-      });
-    }
+      if (
+        !/^[\w.-]+@[\w.-]+$/.test(
+          String(upiId).trim()
+        )
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid UPI ID.",
+        });
+      }
 
-    if (!termsAccepted) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Please accept the Terms & Conditions.",
-      });
-    }
+      if (!termsAccepted) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please accept the Terms & Conditions.",
+        });
+      }
 
-    // ==================================================
-    // NORMALIZE
-    // ==================================================
+      // ==================================================
+      // NORMALIZE
+      // ==================================================
 
-    const cleanFullName =
-      String(fullName).trim();
+      const cleanFullName =
+        String(fullName).trim();
 
-    const cleanUsername =
-      String(username)
-        .trim()
-        .toLowerCase();
+      const cleanUsername =
+        String(username)
+          .trim()
+          .toLowerCase();
 
-    const cleanMobile =
-      String(mobile).trim();
+      const cleanMobile =
+        String(mobile).trim();
 
-    const cleanEmail =
-      String(email)
-        .trim()
-        .toLowerCase();
+      const cleanEmail =
+        String(email)
+          .trim()
+          .toLowerCase();
 
-    const cleanGameUid =
-      String(gameUid).trim();
+      const cleanGameUid =
+        String(gameUid).trim();
 
-    const cleanUpiId =
-      String(upiId)
-        .trim()
-        .toLowerCase();
+      const cleanUpiId =
+        String(upiId)
+          .trim()
+          .toLowerCase();
 
-    // ==================================================
-    // HANUOTP API KEY
-    // ==================================================
+      // ==================================================
+      // HANUOTP API KEY
+      // ==================================================
 
-    const hanuOtpApiKey =
-      process.env.HANUOTP_API_KEY;
+      const hanuOtpApiKey =
+        process.env.HANUOTP_API_KEY;
 
-    if (!hanuOtpApiKey) {
+      if (!hanuOtpApiKey) {
+        console.error(
+          "HANUOTP_API_KEY is missing."
+        );
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "OTP service is not configured.",
+        });
+      }
+
+      // ==================================================
+      // CHECK USERNAME
+      // ==================================================
+
+      const existingUsername =
+        await User.findOne({
+          username:
+            cleanUsername,
+        });
+
+      if (existingUsername) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Username is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK MOBILE
+      // ==================================================
+
+      const existingMobile =
+        await User.findOne({
+          mobile: cleanMobile,
+        });
+
+      if (existingMobile) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Mobile number is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK EMAIL
+      // ==================================================
+
+      const existingEmail =
+        await User.findOne({
+          email: cleanEmail,
+        });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Email address is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK GAME UID
+      // ==================================================
+
+      const gameUidQuery =
+        game === "BGMI"
+          ? {
+              bgmiUid:
+                cleanGameUid,
+            }
+          : {
+              freeFireUid:
+                cleanGameUid,
+            };
+
+      const existingGameUid =
+        await User.findOne(
+          gameUidQuery
+        );
+
+      if (existingGameUid) {
+        return res.status(409).json({
+          success: false,
+          message:
+            `${game} UID is already registered.`,
+        });
+      }
+
+      // ==================================================
+      // GENERATE OTP
+      // ==================================================
+
+      const otp = generateOtp();
+
+      const otpExpiresAt =
+        Date.now() +
+        10 * 60 * 1000;
+
+      console.log(
+        "Generated OTP:",
+        otp
+      );
+
+      console.log(
+        "Mobile:",
+        cleanMobile
+      );
+
+      // ==================================================
+      // STORE REGISTRATION DATA
+      // ==================================================
+
+      req.session.pendingRegistration =
+        {
+          fullName:
+            cleanFullName,
+
+          username:
+            cleanUsername,
+
+          mobile:
+            cleanMobile,
+
+          email:
+            cleanEmail,
+
+          password:
+            String(password),
+
+          game,
+
+          gameUid:
+            cleanGameUid,
+
+          upiId:
+            cleanUpiId,
+
+          termsAccepted: true,
+
+          mobileOtp:
+            otp,
+
+          mobileOtpExpiresAt:
+            otpExpiresAt,
+
+          mobileOtpAttempts: 0,
+        };
+
+      // ==================================================
+      // SAVE SESSION
+      // ==================================================
+
+      await saveSession(req);
+
+      const registrationId =
+        req.sessionID;
+
+      console.log(
+        "Registration session created:",
+        registrationId
+      );
+
+      // ==================================================
+      // SEND OTP
+      // ==================================================
+
+      try {
+        const response =
+          await axios.get(
+            "https://api.hanuotp.in/sms-otp.php",
+            {
+              params: {
+                number:
+                  cleanMobile,
+
+                OTP: otp,
+
+                apikey:
+                  hanuOtpApiKey,
+
+                templatesid:
+                  "default",
+              },
+
+              timeout: 15000,
+            }
+          );
+
+        console.log(
+          "HanuOTP response:",
+          response.data
+        );
+
+        if (
+          response.data &&
+          response.data.status ===
+            "success"
+        ) {
+          return res.status(201).json({
+            success: true,
+
+            message:
+              "OTP sent successfully to your mobile number.",
+
+            registrationId,
+
+            mobile:
+              cleanMobile,
+
+            email:
+              cleanEmail,
+
+            username:
+              cleanUsername,
+
+            game,
+          });
+        }
+
+        console.error(
+          "HanuOTP rejected request:",
+          response.data
+        );
+
+        delete req.session
+          .pendingRegistration;
+
+        await saveSession(req);
+
+        return res.status(400).json({
+          success: false,
+
+          message:
+            response.data?.message ||
+            "Unable to send OTP. Please try again.",
+        });
+      } catch (otpError) {
+        console.error(
+          "HanuOTP request error:",
+          otpError.response
+            ?.data ||
+            otpError.message
+        );
+
+        delete req.session
+          .pendingRegistration;
+
+        await saveSession(req);
+
+        return res.status(502).json({
+          success: false,
+
+          message:
+            "Unable to send OTP. Please try again.",
+        });
+      }
+    } catch (error) {
       console.error(
-        "HANUOTP_API_KEY is missing."
+        "Register error:",
+        error
       );
 
       return res.status(500).json({
         success: false,
+
         message:
-          "OTP service is not configured.",
+          "Registration failed. Please try again.",
       });
     }
-
-    // ==================================================
-    // CHECK USERNAME
-    // ==================================================
-
-    const existingUsername =
-      await User.findOne({
-        username: cleanUsername,
-      });
-
-    if (existingUsername) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Username is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK MOBILE
-    // ==================================================
-
-    const existingMobile =
-      await User.findOne({
-        mobile: cleanMobile,
-      });
-
-    if (existingMobile) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Mobile number is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK EMAIL
-    // ==================================================
-
-    const existingEmail =
-      await User.findOne({
-        email: cleanEmail,
-      });
-
-    if (existingEmail) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Email address is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK GAME UID
-    // ==================================================
-
-    const gameUidQuery =
-      game === "BGMI"
-        ? {
-            bgmiUid: cleanGameUid,
-          }
-        : {
-            freeFireUid: cleanGameUid,
-          };
-
-    const existingGameUid =
-      await User.findOne(gameUidQuery);
-
-    if (existingGameUid) {
-      return res.status(409).json({
-        success: false,
-        message:
-          `${game} UID is already registered.`,
-      });
-    }
-
-    // ==================================================
-    // GENERATE OTP
-    // ==================================================
-
-    const otp = generateOtp();
-
-    const otpExpiresAt =
-      Date.now() + 10 * 60 * 1000;
-
-    console.log("Generated OTP:", otp);
-    console.log("Mobile:", cleanMobile);
-
-    // ==================================================
-    // STORE REGISTRATION DATA
-    // ==================================================
-
-    req.session.pendingRegistration = {
-      fullName: cleanFullName,
-      username: cleanUsername,
-      mobile: cleanMobile,
-      email: cleanEmail,
-      password: String(password),
-      game,
-      gameUid: cleanGameUid,
-      upiId: cleanUpiId,
-      termsAccepted: true,
-      mobileOtp: otp,
-      mobileOtpExpiresAt: otpExpiresAt,
-      mobileOtpAttempts: 0,
-    };
-
-    // ==================================================
-    // SAVE SESSION
-    // ==================================================
-
-    await saveSession(req);
-
-    const registrationId =
-      req.sessionID;
-
-    console.log(
-      "Registration session created:",
-      registrationId
-    );
-
-    // ==================================================
-    // SEND OTP
-    // ==================================================
-
-    try {
-      const response =
-        await axios.get(
-          "https://api.hanuotp.in/sms-otp.php",
-          {
-            params: {
-              number: cleanMobile,
-              OTP: otp,
-              apikey: hanuOtpApiKey,
-              templatesid: "default",
-            },
-            timeout: 15000,
-          }
-        );
-
-      console.log(
-        "HanuOTP response:",
-        response.data
-      );
-
-      if (
-        response.data &&
-        response.data.status === "success"
-      ) {
-        return res.status(201).json({
-          success: true,
-          message:
-            "OTP sent successfully to your mobile number.",
-          registrationId,
-          mobile: cleanMobile,
-          email: cleanEmail,
-          username: cleanUsername,
-          game,
-        });
-      }
-
-      console.error(
-        "HanuOTP rejected request:",
-        response.data
-      );
-
-      delete req.session.pendingRegistration;
-
-      await saveSession(req);
-
-      return res.status(400).json({
-        success: false,
-        message:
-          response.data?.message ||
-          "Unable to send OTP. Please try again.",
-      });
-    } catch (otpError) {
-      console.error(
-        "HanuOTP request error:",
-        otpError.response?.data ||
-          otpError.message
-      );
-
-      delete req.session.pendingRegistration;
-
-      await saveSession(req);
-
-      return res.status(502).json({
-        success: false,
-        message:
-          "Unable to send OTP. Please try again.",
-      });
-    }
-  } catch (error) {
-    console.error(
-      "Register error:",
-      error
-    );
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "Registration failed. Please try again.",
-    });
   }
-});
+);
 
 // ======================================================
 // VERIFY REGISTRATION OTP
 // POST /api/auth/verify
 // ======================================================
 
-router.post("/verify", async (req, res) => {
-  try {
-    const {
-      registrationId,
-      mobileOtp,
-    } = req.body;
+router.post(
+  "/verify",
+  async (req, res) => {
+    try {
+      const {
+        registrationId,
+        mobileOtp,
+      } = req.body;
 
-    console.log("");
-    console.log("======================================");
-    console.log("OTP VERIFICATION REQUEST");
-    console.log("======================================");
-
-    console.log(
-      "Registration ID received:",
-      registrationId
-    );
-
-    console.log(
-      "Current request session:",
-      req.sessionID
-    );
-
-    if (!registrationId) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Registration ID is required.",
-      });
-    }
-
-    if (!mobileOtp) {
-      return res.status(400).json({
-        success: false,
-        message: "OTP is required.",
-      });
-    }
-
-    const cleanOtp =
-      String(mobileOtp).trim();
-
-    if (!/^\d{6}$/.test(cleanOtp)) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Please enter a valid 6-digit OTP.",
-      });
-    }
-
-    // ==================================================
-    // RECOVER REGISTRATION SESSION
-    // ==================================================
-
-    const registrationSession =
-      await getRegistrationSession(
-        req,
-        String(registrationId)
+      console.log("");
+      console.log(
+        "======================================"
+      );
+      console.log(
+        "OTP VERIFICATION REQUEST"
+      );
+      console.log(
+        "======================================"
       );
 
-    if (!registrationSession) {
-      console.error(
-        "Registration session NOT FOUND:",
+      console.log(
+        "Registration ID received:",
         registrationId
       );
 
-      return res.status(404).json({
-        success: false,
-        message:
-          "Registration session not found or expired. Please register again.",
-      });
-    }
-
-    const registration =
-      registrationSession.session
-        .pendingRegistration;
-
-    if (!registration) {
-      return res.status(404).json({
-        success: false,
-        message:
-          "Registration data not found. Please register again.",
-      });
-    }
-
-    // ==================================================
-    // OTP EXPIRY
-    // ==================================================
-
-    if (
-      !registration.mobileOtpExpiresAt ||
-      registration.mobileOtpExpiresAt <
-        Date.now()
-    ) {
-      try {
-        await destroyRegistrationSession(
-          req,
-          registrationSession
-        );
-      } catch (destroyError) {
-        console.error(
-          "OTP expired session cleanup error:",
-          destroyError
-        );
-      }
-
-      return res.status(400).json({
-        success: false,
-        message:
-          "OTP has expired. Please register again.",
-      });
-    }
-
-    // ==================================================
-    // OTP ATTEMPTS
-    // ==================================================
-
-    const attempts =
-      Number(
-        registration.mobileOtpAttempts || 0
+      console.log(
+        "Current request session:",
+        req.sessionID
       );
 
-    if (attempts >= 5) {
-      try {
-        await destroyRegistrationSession(
+      if (!registrationId) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Registration ID is required.",
+        });
+      }
+
+      if (!mobileOtp) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "OTP is required.",
+        });
+      }
+
+      const cleanOtp =
+        String(mobileOtp).trim();
+
+      if (!/^\d{6}$/.test(cleanOtp)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Please enter a valid 6-digit OTP.",
+        });
+      }
+
+      // ==================================================
+      // RECOVER REGISTRATION SESSION
+      // ==================================================
+
+      const registrationSession =
+        await getRegistrationSession(
+          req,
+          String(registrationId)
+        );
+
+      if (!registrationSession) {
+        console.error(
+          "Registration session NOT FOUND:",
+          registrationId
+        );
+
+        return res.status(404).json({
+          success: false,
+          message:
+            "Registration session not found or expired. Please register again.",
+        });
+      }
+
+      const registration =
+        registrationSession.session
+          .pendingRegistration;
+
+      if (!registration) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Registration data not found. Please register again.",
+        });
+      }
+
+      // ==================================================
+      // OTP EXPIRY
+      // ==================================================
+
+      if (
+        !registration.mobileOtpExpiresAt ||
+        registration.mobileOtpExpiresAt <
+          Date.now()
+      ) {
+        try {
+          await destroyRegistrationSession(
+            req,
+            registrationSession
+          );
+        } catch (
+          destroyError
+        ) {
+          console.error(
+            "OTP expired session cleanup error:",
+            destroyError
+          );
+        }
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "OTP has expired. Please register again.",
+        });
+      }
+
+      // ==================================================
+      // OTP ATTEMPTS
+      // ==================================================
+
+      const attempts =
+        Number(
+          registration.mobileOtpAttempts ||
+            0
+        );
+
+      if (attempts >= 5) {
+        try {
+          await destroyRegistrationSession(
+            req,
+            registrationSession
+          );
+        } catch (
+          destroyError
+        ) {
+          console.error(
+            "OTP attempts cleanup error:",
+            destroyError
+          );
+        }
+
+        return res.status(429).json({
+          success: false,
+          message:
+            "Maximum OTP attempts exceeded. Please register again.",
+        });
+      }
+
+      // ==================================================
+      // CHECK OTP
+      // ==================================================
+
+      if (
+        String(
+          registration.mobileOtp
+        ) !== cleanOtp
+      ) {
+        registration.mobileOtpAttempts =
+          attempts + 1;
+
+        registrationSession.session
+          .pendingRegistration =
+          registration;
+
+        await saveRegistrationSession(
           req,
           registrationSession
         );
-      } catch (destroyError) {
-        console.error(
-          "OTP attempts cleanup error:",
-          destroyError
-        );
+
+        return res.status(400).json({
+          success: false,
+          message:
+            "Invalid OTP.",
+        });
       }
 
-      return res.status(429).json({
-        success: false,
-        message:
-          "Maximum OTP attempts exceeded. Please register again.",
+      console.log(
+        "OTP MATCHED SUCCESSFULLY"
+      );
+
+      // ==================================================
+      // CHECK USERNAME AGAIN
+      // ==================================================
+
+      const existingUsername =
+        await User.findOne({
+          username:
+            registration.username,
+        });
+
+      if (existingUsername) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Username is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK MOBILE AGAIN
+      // ==================================================
+
+      const existingMobile =
+        await User.findOne({
+          mobile:
+            registration.mobile,
+        });
+
+      if (existingMobile) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Mobile number is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK EMAIL AGAIN
+      // ==================================================
+
+      const existingEmail =
+        await User.findOne({
+          email:
+            registration.email,
+        });
+
+      if (existingEmail) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Email address is already registered.",
+        });
+      }
+
+      // ==================================================
+      // CHECK GAME UID AGAIN
+      // ==================================================
+
+      const gameUidQuery =
+        registration.game === "BGMI"
+          ? {
+              bgmiUid:
+                registration.gameUid,
+            }
+          : {
+              freeFireUid:
+                registration.gameUid,
+            };
+
+      const existingGameUid =
+        await User.findOne(
+          gameUidQuery
+        );
+
+      if (existingGameUid) {
+        return res.status(409).json({
+          success: false,
+          message:
+            `${registration.game} UID is already registered.`,
+        });
+      }
+
+      // ==================================================
+      // CREATE USER
+      // ==================================================
+
+      const user = new User({
+        fullName:
+          registration.fullName,
+
+        username:
+          registration.username,
+
+        mobile:
+          registration.mobile,
+
+        email:
+          registration.email,
+
+        game:
+          registration.game,
+
+        gameUid:
+          registration.gameUid,
+
+        upiId:
+          registration.upiId,
+
+        termsAccepted:
+          registration.termsAccepted,
+
+        role: "user",
       });
-    }
 
-    // ==================================================
-    // CHECK OTP
-    // ==================================================
+      // ==================================================
+      // CREATE PASSWORD
+      // ==================================================
 
-    if (
-      String(registration.mobileOtp) !==
-      cleanOtp
-    ) {
-      registration.mobileOtpAttempts =
-        attempts + 1;
+      const registeredUser =
+        await User.register(
+          user,
+          registration.password
+        );
+
+      console.log(
+        "USER CREATED:",
+        registeredUser.username
+      );
+
+      // ==================================================
+      // REMOVE TEMP REGISTRATION DATA
+      // ==================================================
 
       registrationSession.session
         .pendingRegistration =
-        registration;
+        undefined;
 
-      await saveRegistrationSession(
-        req,
-        registrationSession
-      );
-
-      return res.status(400).json({
-        success: false,
-        message: "Invalid OTP.",
-      });
-    }
-
-    console.log(
-      "OTP MATCHED SUCCESSFULLY"
-    );
-
-    // ==================================================
-    // CHECK USERNAME AGAIN
-    // ==================================================
-
-    const existingUsername =
-      await User.findOne({
-        username:
-          registration.username,
-      });
-
-    if (existingUsername) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Username is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK MOBILE AGAIN
-    // ==================================================
-
-    const existingMobile =
-      await User.findOne({
-        mobile:
-          registration.mobile,
-      });
-
-    if (existingMobile) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Mobile number is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK EMAIL AGAIN
-    // ==================================================
-
-    const existingEmail =
-      await User.findOne({
-        email:
-          registration.email,
-      });
-
-    if (existingEmail) {
-      return res.status(409).json({
-        success: false,
-        message:
-          "Email address is already registered.",
-      });
-    }
-
-    // ==================================================
-    // CHECK GAME UID AGAIN
-    // ==================================================
-
-    const gameUidQuery =
-      registration.game === "BGMI"
-        ? {
-            bgmiUid:
-              registration.gameUid,
-          }
-        : {
-            freeFireUid:
-              registration.gameUid,
-          };
-
-    const existingGameUid =
-      await User.findOne(
-        gameUidQuery
-      );
-
-    if (existingGameUid) {
-      return res.status(409).json({
-        success: false,
-        message:
-          `${registration.game} UID is already registered.`,
-      });
-    }
-
-    // ==================================================
-    // CREATE USER
-    // ==================================================
-
-    const user = new User({
-      fullName:
-        registration.fullName,
-
-      username:
-        registration.username,
-
-      mobile:
-        registration.mobile,
-
-      email:
-        registration.email,
-
-      game:
-        registration.game,
-
-      gameUid:
-        registration.gameUid,
-
-      upiId:
-        registration.upiId,
-
-      termsAccepted:
-        registration.termsAccepted,
-
-      role: "user",
-    });
-
-    // ==================================================
-    // CREATE PASSWORD
-    // ==================================================
-
-    const registeredUser =
-      await User.register(
-        user,
-        registration.password
-      );
-
-    console.log(
-      "USER CREATED:",
-      registeredUser.username
-    );
-
-    // ==================================================
-    // REMOVE TEMP REGISTRATION DATA
-    // ==================================================
-
-    registrationSession.session
-      .pendingRegistration =
-      undefined;
-
-    try {
-      await saveRegistrationSession(
-        req,
-        registrationSession
-      );
-    } catch (cleanupError) {
-      console.error(
-        "Temporary registration cleanup error:",
+      try {
+        await saveRegistrationSession(
+          req,
+          registrationSession
+        );
+      } catch (
         cleanupError
-      );
-    }
-
-    // ==================================================
-    // LOGIN USER
-    // ==================================================
-
-    req.login(
-      registeredUser,
-      async (loginError) => {
-        if (loginError) {
-          console.error(
-            "Auto login error:",
-            loginError
-          );
-
-          return res.status(500).json({
-            success: false,
-            message:
-              "Account created but automatic login failed.",
-          });
-        }
-
-        try {
-          await saveSession(req);
-
-          return res.status(200).json({
-            success: true,
-            message:
-              "Account created and mobile verified successfully.",
-            user:
-              getUserData(
-                registeredUser
-              ),
-          });
-        } catch (sessionError) {
-          console.error(
-            "Login session save error:",
-            sessionError
-          );
-
-          return res.status(500).json({
-            success: false,
-            message:
-              "Account created but session could not be saved.",
-          });
-        }
+      ) {
+        console.error(
+          "Temporary registration cleanup error:",
+          cleanupError
+        );
       }
-    );
-  } catch (error) {
-    console.error(
-      "OTP verification error:",
-      error
-    );
 
-    if (
-      error &&
-      error.code === 11000
-    ) {
-      return res.status(409).json({
+      // ==================================================
+      // LOGIN USER
+      // ==================================================
+
+      req.login(
+        registeredUser,
+        async (loginError) => {
+          if (loginError) {
+            console.error(
+              "Auto login error:",
+              loginError
+            );
+
+            return res.status(500).json({
+              success: false,
+              message:
+                "Account created but automatic login failed.",
+            });
+          }
+
+          try {
+            await saveSession(req);
+
+            return res.status(200).json({
+              success: true,
+
+              message:
+                "Account created and mobile verified successfully.",
+
+              user:
+                getUserData(
+                  registeredUser
+                ),
+            });
+          } catch (
+            sessionError
+          ) {
+            console.error(
+              "Login session save error:",
+              sessionError
+            );
+
+            return res.status(500).json({
+              success: false,
+
+              message:
+                "Account created but session could not be saved.",
+            });
+          }
+        }
+      );
+    } catch (error) {
+      console.error(
+        "OTP verification error:",
+        error
+      );
+
+      if (
+        error &&
+        error.code === 11000
+      ) {
+        return res.status(409).json({
+          success: false,
+          message:
+            "Username, email, mobile, or game UID already exists.",
+        });
+      }
+
+      return res.status(500).json({
         success: false,
         message:
-          "Username, email, mobile, or game UID already exists.",
+          "OTP verification failed. Please try again.",
       });
     }
-
-    return res.status(500).json({
-      success: false,
-      message:
-        "OTP verification failed. Please try again.",
-    });
   }
-});
+);
 
 // ======================================================
 // LOGIN
@@ -1147,7 +1349,9 @@ router.post(
           user,
           (loginError) => {
             if (loginError) {
-              return next(loginError);
+              return next(
+                loginError
+              );
             }
 
             req.session.save(
@@ -1160,10 +1364,14 @@ router.post(
 
                 return res.status(200).json({
                   success: true,
+
                   message:
                     "Login successful",
+
                   user:
-                    getUserData(user),
+                    getUserData(
+                      user
+                    ),
                 });
               }
             );
@@ -1294,11 +1502,15 @@ router.patch(
       // FULL NAME
       // ==================================================
 
-      if (fullName !== undefined) {
+      if (
+        fullName !== undefined
+      ) {
         const cleanFullName =
           String(fullName).trim();
 
-        if (cleanFullName.length < 3) {
+        if (
+          cleanFullName.length < 3
+        ) {
           return res.status(400).json({
             success: false,
             message:
@@ -1314,13 +1526,17 @@ router.patch(
       // USERNAME
       // ==================================================
 
-      if (username !== undefined) {
+      if (
+        username !== undefined
+      ) {
         const cleanUsername =
           String(username)
             .trim()
             .toLowerCase();
 
-        if (cleanUsername.length < 3) {
+        if (
+          cleanUsername.length < 3
+        ) {
           return res.status(400).json({
             success: false,
             message:
@@ -1332,6 +1548,7 @@ router.patch(
           await User.findOne({
             username:
               cleanUsername,
+
             _id: {
               $ne: user._id,
             },
@@ -1353,7 +1570,9 @@ router.patch(
       // EMAIL
       // ==================================================
 
-      if (email !== undefined) {
+      if (
+        email !== undefined
+      ) {
         const cleanEmail =
           String(email)
             .trim()
@@ -1375,6 +1594,7 @@ router.patch(
           await User.findOne({
             email:
               cleanEmail,
+
             _id: {
               $ne: user._id,
             },
@@ -1396,7 +1616,9 @@ router.patch(
       // MOBILE
       // ==================================================
 
-      if (mobile !== undefined) {
+      if (
+        mobile !== undefined
+      ) {
         const cleanMobile =
           String(mobile).trim();
 
@@ -1416,6 +1638,7 @@ router.patch(
           await User.findOne({
             mobile:
               cleanMobile,
+
             _id: {
               $ne: user._id,
             },
@@ -1437,7 +1660,9 @@ router.patch(
       // UPI ID
       // ==================================================
 
-      if (upiId !== undefined) {
+      if (
+        upiId !== undefined
+      ) {
         const cleanUpiId =
           String(upiId)
             .trim()
@@ -1464,8 +1689,10 @@ router.patch(
 
       return res.status(200).json({
         success: true,
+
         message:
           "Profile updated successfully.",
+
         user:
           getUserData(user),
       });
@@ -1563,6 +1790,7 @@ router.patch(
       const existingUser =
         await User.findOne({
           ...uidQuery,
+
           _id: {
             $ne: user._id,
           },
@@ -1581,13 +1809,13 @@ router.patch(
           cleanUid;
       }
 
-      if (game === "Free Fire") {
+      if (
+        game === "Free Fire"
+      ) {
         user.freeFireUid =
           cleanUid;
       }
 
-      // Keep the main gameUid synchronized
-      // when this is the user's selected game.
       if (user.game === game) {
         user.gameUid =
           cleanUid;
@@ -1597,8 +1825,10 @@ router.patch(
 
       return res.status(200).json({
         success: true,
+
         message:
           `${game} UID updated successfully.`,
+
         user:
           getUserData(user),
       });
@@ -1622,7 +1852,8 @@ router.post(
   "/forgot-password/send-otp",
   async (req, res) => {
     try {
-      const { mobile } = req.body;
+      const { mobile } =
+        req.body;
 
       // ==================================================
       // VALIDATE MOBILE
@@ -1650,7 +1881,8 @@ router.post(
 
       const user =
         await User.findOne({
-          mobile: cleanMobile,
+          mobile:
+            cleanMobile,
         });
 
       if (!user) {
@@ -1695,10 +1927,11 @@ router.post(
         generateResetToken();
 
       const otpExpiresAt =
-        Date.now() + 10 * 60 * 1000;
+        Date.now() +
+        10 * 60 * 1000;
 
       // ==================================================
-      // CREATE TOKEN SESSION
+      // CREATE RESET SESSION
       // ==================================================
 
       const resetSession = {
@@ -1716,6 +1949,7 @@ router.post(
             ),
 
           httpOnly: true,
+
           path: "/",
         },
 
@@ -1726,25 +1960,42 @@ router.post(
           mobile:
             cleanMobile,
 
-          otp:
-            otp,
+          otp,
 
-          otpExpiresAt:
-            otpExpiresAt,
+          otpExpiresAt,
 
-          otpAttempts:
-            0,
+          otpAttempts: 0,
 
-          verified:
-            false,
+          verified: false,
 
-          resetToken:
-            resetToken,
+          verifiedAt: null,
+
+          resetToken,
         },
       };
 
       // ==================================================
-      // SAVE TOKEN SESSION
+      // CHECK SESSION STORE
+      // ==================================================
+
+      if (
+        !req.sessionStore ||
+        typeof req.sessionStore.set !==
+          "function"
+      ) {
+        console.error(
+          "Session store is not available."
+        );
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Password reset service is not configured correctly.",
+        });
+      }
+
+      // ==================================================
+      // SAVE RESET TOKEN SESSION
       // ==================================================
 
       await new Promise(
@@ -1764,9 +2015,15 @@ router.post(
       );
 
       console.log("");
-      console.log("======================================");
-      console.log("FORGOT PASSWORD OTP");
-      console.log("======================================");
+      console.log(
+        "======================================"
+      );
+      console.log(
+        "FORGOT PASSWORD OTP"
+      );
+      console.log(
+        "======================================"
+      );
 
       console.log(
         "Mobile:",
@@ -1795,7 +2052,7 @@ router.post(
       );
 
       // ==================================================
-      // SEND OTP THROUGH HANUOTP
+      // SEND OTP
       // ==================================================
 
       try {
@@ -1837,10 +2094,12 @@ router.post(
         ) {
           return res.status(200).json({
             success: true,
+
             message:
               "OTP sent successfully.",
-            resetToken:
-              resetToken,
+
+            resetToken,
+
             mobile:
               cleanMobile,
           });
@@ -1866,6 +2125,7 @@ router.post(
 
         return res.status(400).json({
           success: false,
+
           message:
             response.data?.message ||
             "Unable to send OTP. Please try again.",
@@ -1873,7 +2133,8 @@ router.post(
       } catch (otpError) {
         console.error(
           "Forgot password OTP error:",
-          otpError.response?.data ||
+          otpError.response
+            ?.data ||
             otpError.message
         );
 
@@ -1888,6 +2149,7 @@ router.post(
 
         return res.status(502).json({
           success: false,
+
           message:
             "Unable to send OTP. Please try again.",
         });
@@ -1900,6 +2162,7 @@ router.post(
 
       return res.status(500).json({
         success: false,
+
         message:
           "Unable to send OTP.",
       });
@@ -1921,14 +2184,20 @@ router.post(
         req.body.mobileOtp;
 
       const resetToken =
-        getResetTokenFromRequest(req);
+        getResetTokenFromRequest(
+          req
+        );
 
       console.log("");
-      console.log("======================================");
+      console.log(
+        "======================================"
+      );
       console.log(
         "FORGOT PASSWORD OTP VERIFICATION"
       );
-      console.log("======================================");
+      console.log(
+        "======================================"
+      );
 
       console.log(
         "Reset Token received:",
@@ -2019,6 +2288,14 @@ router.post(
         resetSession.session
           .forgotPassword;
 
+      if (!resetData) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Password reset session expired. Please request a new OTP.",
+        });
+      }
+
       // ==================================================
       // CHECK TOKEN MATCH
       // ==================================================
@@ -2053,7 +2330,9 @@ router.post(
             req,
             resetSession
           );
-        } catch (destroyError) {
+        } catch (
+          destroyError
+        ) {
           console.error(
             "Reset session destroy error:",
             destroyError
@@ -2073,7 +2352,8 @@ router.post(
 
       const otpAttempts =
         Number(
-          resetData.otpAttempts || 0
+          resetData.otpAttempts ||
+            0
         );
 
       if (otpAttempts >= 5) {
@@ -2082,7 +2362,9 @@ router.post(
             req,
             resetSession
           );
-        } catch (destroyError) {
+        } catch (
+          destroyError
+        ) {
           console.error(
             "Reset session destroy error:",
             destroyError
@@ -2141,7 +2423,7 @@ router.post(
         resetData;
 
       // ==================================================
-      // SAVE VERIFIED TOKEN SESSION
+      // SAVE VERIFIED SESSION
       // ==================================================
 
       await saveResetSession(
@@ -2168,10 +2450,11 @@ router.post(
 
       return res.status(200).json({
         success: true,
+
         message:
           "OTP verified successfully.",
-        resetToken:
-          resetToken,
+
+        resetToken,
       });
     } catch (error) {
       console.error(
@@ -2181,6 +2464,7 @@ router.post(
 
       return res.status(500).json({
         success: false,
+
         message:
           "OTP verification failed.",
       });
@@ -2202,14 +2486,20 @@ router.post(
         req.body.password;
 
       const resetToken =
-        getResetTokenFromRequest(req);
+        getResetTokenFromRequest(
+          req
+        );
 
       console.log("");
-      console.log("======================================");
+      console.log(
+        "======================================"
+      );
       console.log(
         "FORGOT PASSWORD RESET REQUEST"
       );
-      console.log("======================================");
+      console.log(
+        "======================================"
+      );
 
       console.log(
         "Reset Token received:",
@@ -2272,6 +2562,14 @@ router.post(
         resetSession.session
           .forgotPassword;
 
+      if (!resetData) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Password reset session expired. Please request a new OTP.",
+        });
+      }
+
       // ==================================================
       // VERIFY TOKEN
       // ==================================================
@@ -2314,7 +2612,9 @@ router.post(
             req,
             resetSession
           );
-        } catch (destroyError) {
+        } catch (
+          destroyError
+        ) {
           console.error(
             "Reset session destroy error:",
             destroyError
@@ -2335,7 +2635,9 @@ router.post(
       if (
         resetData.verifiedAt &&
         Date.now() -
-          Number(resetData.verifiedAt) >
+          Number(
+            resetData.verifiedAt
+          ) >
           10 * 60 * 1000
       ) {
         try {
@@ -2343,7 +2645,9 @@ router.post(
             req,
             resetSession
           );
-        } catch (destroyError) {
+        } catch (
+          destroyError
+        ) {
           console.error(
             "Reset session destroy error:",
             destroyError
@@ -2372,7 +2676,9 @@ router.post(
             req,
             resetSession
           );
-        } catch (destroyError) {
+        } catch (
+          destroyError
+        ) {
           console.error(
             "Reset session destroy error:",
             destroyError
@@ -2405,7 +2711,9 @@ router.post(
           req,
           resetSession
         );
-      } catch (destroyError) {
+      } catch (
+        destroyError
+      ) {
         console.error(
           "Reset token cleanup error:",
           destroyError
@@ -2427,6 +2735,7 @@ router.post(
 
       return res.status(200).json({
         success: true,
+
         message:
           "Password reset successfully.",
       });
@@ -2438,6 +2747,7 @@ router.post(
 
       return res.status(500).json({
         success: false,
+
         message:
           "Unable to reset password.",
       });
@@ -2456,12 +2766,15 @@ router.post(
     req.logout(
       (logoutError) => {
         if (logoutError) {
-          return next(logoutError);
+          return next(
+            logoutError
+          );
         }
 
         if (!req.session) {
           return res.status(200).json({
             success: true,
+
             message:
               "Logged out successfully.",
           });
@@ -2486,6 +2799,7 @@ router.post(
 
             return res.status(200).json({
               success: true,
+
               message:
                 "Logged out successfully.",
             });
