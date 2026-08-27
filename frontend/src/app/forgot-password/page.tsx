@@ -1,11 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import {
-  FormEvent,
-  useEffect,
-  useState,
-} from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 // ======================================================
 // API URL
@@ -19,11 +15,7 @@ const API_URL = (
 // STEP
 // ======================================================
 
-type Step =
-  | "mobile"
-  | "otp"
-  | "password"
-  | "success";
+type Step = "mobile" | "otp" | "password" | "success";
 
 // ======================================================
 // PAGE
@@ -34,67 +26,47 @@ export default function ForgotPasswordPage() {
   // CURRENT STEP
   // ====================================================
 
-  const [step, setStep] =
-    useState<Step>("mobile");
+  const [step, setStep] = useState<Step>("mobile");
 
   // ====================================================
   // MOBILE
   // ====================================================
 
-  const [mobile, setMobile] =
-    useState("");
+  const [mobile, setMobile] = useState("");
 
   // ====================================================
   // OTP
   // ====================================================
 
-  const [otpDigits, setOtpDigits] =
-    useState<string[]>([
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-    ]);
+  const [otpDigits, setOtpDigits] = useState<string[]>([
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ]);
 
   // ====================================================
   // PASSWORD
   // ====================================================
 
-  const [newPassword, setNewPassword] =
-    useState("");
-
-  const [confirmPassword, setConfirmPassword] =
-    useState("");
-
-  // ====================================================
-  // RESET TOKEN
-  // ====================================================
-
-  const [resetToken, setResetToken] =
-    useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   // ====================================================
   // UI
   // ====================================================
 
-  const [loading, setLoading] =
-    useState(false);
-
-  const [error, setError] =
-    useState("");
-
-  const [message, setMessage] =
-    useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   // ====================================================
   // PASSWORD VISIBILITY
   // ====================================================
 
-  const [showPassword, setShowPassword] =
-    useState(false);
-
+  const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] =
     useState(false);
 
@@ -102,30 +74,22 @@ export default function ForgotPasswordPage() {
   // OTP TIMER
   // ====================================================
 
-  const [otpTimer, setOtpTimer] =
-    useState(60);
+  const [otpTimer, setOtpTimer] = useState(60);
 
   // ====================================================
   // OTP COUNTDOWN
   // ====================================================
 
   useEffect(() => {
-    if (step !== "otp") {
+    if (step !== "otp" || otpTimer <= 0) {
       return;
     }
 
-    if (otpTimer <= 0) {
-      return;
-    }
-
-    const timer =
-      window.setInterval(() => {
-        setOtpTimer((previous) =>
-          previous > 0
-            ? previous - 1
-            : 0
-        );
-      }, 1000);
+    const timer = window.setInterval(() => {
+      setOtpTimer((previous) =>
+        previous > 0 ? previous - 1 : 0
+      );
+    }, 1000);
 
     return () => {
       window.clearInterval(timer);
@@ -136,31 +100,25 @@ export default function ForgotPasswordPage() {
   // VALIDATE MOBILE
   // ====================================================
 
-  function isValidMobile(
-    value: string
-  ) {
+  function isValidMobile(value: string) {
     return /^[6-9]\d{9}$/.test(value);
   }
 
   // ====================================================
   // SEND OTP
+  // POST /api/auth/forgot-password/send-otp
   // ====================================================
 
-  async function handleSendOTP(
-    event?: FormEvent
-  ) {
+  async function handleSendOTP(event?: FormEvent) {
     event?.preventDefault();
 
     setError("");
     setMessage("");
 
-    const cleanMobile =
-      mobile.trim();
+    const cleanMobile = mobile.trim();
 
     if (!cleanMobile) {
-      setError(
-        "Please enter your mobile number."
-      );
+      setError("Please enter your mobile number.");
       return;
     }
 
@@ -172,41 +130,36 @@ export default function ForgotPasswordPage() {
     }
 
     if (!API_URL) {
-      setError(
-        "Backend API URL is not configured."
-      );
+      setError("Backend API URL is not configured.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response =
-        await fetch(
-          `${API_URL}/api/auth/forgot-password/send-otp`,
-          {
-            method: "POST",
+      const response = await fetch(
+        `${API_URL}/api/auth/forgot-password/send-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          // IMPORTANT:
+          // Backend stores OTP inside req.session.
+          credentials: "include",
 
-            credentials: "include",
+          body: JSON.stringify({
+            mobile: cleanMobile,
+          }),
+        }
+      );
 
-            body: JSON.stringify({
-              mobile: cleanMobile,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data?.message ||
-            "Unable to send OTP."
+          data?.message || "Unable to send OTP."
         );
       }
 
@@ -224,8 +177,7 @@ export default function ForgotPasswordPage() {
       setOtpTimer(60);
 
       setMessage(
-        data?.message ||
-          "OTP sent successfully."
+        data?.message || "OTP sent successfully."
       );
 
       setStep("otp");
@@ -248,29 +200,53 @@ export default function ForgotPasswordPage() {
     index: number,
     value: string
   ) {
-    const digit =
-      value
-        .replace(/\D/g, "")
-        .slice(-1);
+    // Support pasting a complete OTP
+    const numbers = value.replace(/\D/g, "");
 
-    const updated = [
-      ...otpDigits,
-    ];
+    if (numbers.length > 1) {
+      const pastedOtp = numbers.slice(0, 6).split("");
+
+      const updated = [
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ];
+
+      pastedOtp.forEach((digit, i) => {
+        updated[i] = digit;
+      });
+
+      setOtpDigits(updated);
+
+      const lastIndex = Math.min(
+        pastedOtp.length - 1,
+        5
+      );
+
+      const input = document.getElementById(
+        `otp-${lastIndex}`
+      ) as HTMLInputElement | null;
+
+      input?.focus();
+
+      return;
+    }
+
+    const digit = numbers.slice(-1);
+
+    const updated = [...otpDigits];
 
     updated[index] = digit;
 
     setOtpDigits(updated);
 
-    if (
-      digit &&
-      index < 5
-    ) {
-      const next =
-        document.getElementById(
-          `otp-${index + 1}`
-        ) as
-          | HTMLInputElement
-          | null;
+    if (digit && index < 5) {
+      const next = document.getElementById(
+        `otp-${index + 1}`
+      ) as HTMLInputElement | null;
 
       next?.focus();
     }
@@ -289,12 +265,9 @@ export default function ForgotPasswordPage() {
       !otpDigits[index] &&
       index > 0
     ) {
-      const previous =
-        document.getElementById(
-          `otp-${index - 1}`
-        ) as
-          | HTMLInputElement
-          | null;
+      const previous = document.getElementById(
+        `otp-${index - 1}`
+      ) as HTMLInputElement | null;
 
       previous?.focus();
     }
@@ -302,6 +275,7 @@ export default function ForgotPasswordPage() {
 
   // ====================================================
   // VERIFY OTP
+  // POST /api/auth/forgot-password/verify-otp
   // ====================================================
 
   async function handleVerifyOTP(
@@ -312,8 +286,7 @@ export default function ForgotPasswordPage() {
     setError("");
     setMessage("");
 
-    const otp =
-      otpDigits.join("");
+    const otp = otpDigits.join("");
 
     if (!/^\d{6}$/.test(otp)) {
       setError(
@@ -323,37 +296,36 @@ export default function ForgotPasswordPage() {
     }
 
     if (!API_URL) {
-      setError(
-        "Backend API URL is not configured."
-      );
+      setError("Backend API URL is not configured.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response =
-        await fetch(
-          `${API_URL}/api/auth/forgot-password/verify-otp`,
-          {
-            method: "POST",
+      const response = await fetch(
+        `${API_URL}/api/auth/forgot-password/verify-otp`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          // VERY IMPORTANT
+          // The backend uses the same session
+          // created while sending OTP.
+          credentials: "include",
 
-            credentials: "include",
+          // IMPORTANT:
+          // Backend expects mobileOtp,
+          // NOT otp.
+          body: JSON.stringify({
+            mobileOtp: otp,
+          }),
+        }
+      );
 
-            body: JSON.stringify({
-              mobile,
-              otp,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -362,18 +334,12 @@ export default function ForgotPasswordPage() {
         );
       }
 
-      if (!data?.resetToken) {
-        throw new Error(
-          "Reset session could not be created."
-        );
-      }
-
-      setResetToken(
-        data.resetToken
-      );
-
+      // IMPORTANT:
+      // Your backend does NOT return resetToken.
+      // It stores verified=true inside req.session.forgotPassword.
       setMessage(
-        "OTP verified successfully."
+        data?.message ||
+          "OTP verified successfully."
       );
 
       setStep("password");
@@ -393,10 +359,7 @@ export default function ForgotPasswordPage() {
   // ====================================================
 
   async function handleResendOTP() {
-    if (
-      otpTimer > 0 ||
-      loading
-    ) {
+    if (otpTimer > 0 || loading) {
       return;
     }
 
@@ -405,6 +368,7 @@ export default function ForgotPasswordPage() {
 
   // ====================================================
   // RESET PASSWORD
+  // POST /api/auth/forgot-password/reset
   // ====================================================
 
   async function handleResetPassword(
@@ -416,9 +380,7 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     if (!newPassword) {
-      setError(
-        "Please enter a new password."
-      );
+      setError("Please enter a new password.");
       return;
     }
 
@@ -436,58 +398,42 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    if (
-      newPassword !==
-      confirmPassword
-    ) {
-      setError(
-        "Passwords do not match."
-      );
-      return;
-    }
-
-    if (!resetToken) {
-      setError(
-        "Your reset session is invalid. Please start again."
-      );
-
-      setStep("mobile");
-
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match.");
       return;
     }
 
     if (!API_URL) {
-      setError(
-        "Backend API URL is not configured."
-      );
+      setError("Backend API URL is not configured.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const response =
-        await fetch(
-          `${API_URL}/api/auth/forgot-password/reset`,
-          {
-            method: "POST",
+      const response = await fetch(
+        `${API_URL}/api/auth/forgot-password/reset`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
 
-            headers: {
-              "Content-Type":
-                "application/json",
-            },
+          // IMPORTANT:
+          // Same session contains:
+          // req.session.forgotPassword.verified
+          credentials: "include",
 
-            credentials: "include",
+          // IMPORTANT:
+          // Backend expects "password",
+          // NOT newPassword or resetToken.
+          body: JSON.stringify({
+            password: newPassword,
+          }),
+        }
+      );
 
-            body: JSON.stringify({
-              resetToken,
-              newPassword,
-            }),
-          }
-        );
-
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
@@ -498,7 +444,16 @@ export default function ForgotPasswordPage() {
 
       setNewPassword("");
       setConfirmPassword("");
-      setResetToken("");
+      setOtpDigits([
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+      ]);
+
+      setMessage("");
 
       setStep("success");
     } catch (error) {
@@ -528,8 +483,6 @@ export default function ForgotPasswordPage() {
       "",
       "",
     ]);
-
-    setResetToken("");
 
     setStep("mobile");
   }
@@ -572,31 +525,24 @@ export default function ForgotPasswordPage() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white flex items-center justify-center px-4 py-10">
-
       {/* Background */}
 
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-
         <div className="absolute -top-40 -left-40 h-96 w-96 rounded-full bg-blue-600/20 blur-3xl" />
 
         <div className="absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-purple-600/20 blur-3xl" />
-
       </div>
 
       {/* Card */}
 
       <div className="relative w-full max-w-md">
-
         <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 shadow-2xl backdrop-blur-xl sm:p-8">
 
           {/* Header */}
 
           <div className="mb-8 text-center">
-
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 shadow-lg shadow-blue-600/30">
-
               {step === "success" ? (
-
                 <svg
                   className="h-7 w-7"
                   viewBox="0 0 24 24"
@@ -604,17 +550,13 @@ export default function ForgotPasswordPage() {
                   stroke="currentColor"
                   strokeWidth="2.5"
                 >
-
                   <path
                     d="M5 12l4 4L19 6"
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-
                 </svg>
-
               ) : (
-
                 <svg
                   className="h-7 w-7"
                   viewBox="0 0 24 24"
@@ -622,7 +564,6 @@ export default function ForgotPasswordPage() {
                   stroke="currentColor"
                   strokeWidth="1.8"
                 >
-
                   <rect
                     x="3"
                     y="11"
@@ -635,15 +576,11 @@ export default function ForgotPasswordPage() {
                     d="M7 11V8a5 5 0 0110 0v3"
                     strokeLinecap="round"
                   />
-
                 </svg>
-
               )}
-
             </div>
 
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-
               {step === "mobile" &&
                 "Forgot Password"}
 
@@ -655,11 +592,9 @@ export default function ForgotPasswordPage() {
 
               {step === "success" &&
                 "Password Updated"}
-
             </h1>
 
             <p className="mt-2 text-sm leading-6 text-slate-400">
-
               {step === "mobile" &&
                 "Enter your registered mobile number to reset your password."}
 
@@ -671,76 +606,54 @@ export default function ForgotPasswordPage() {
 
               {step === "success" &&
                 "Your password has been changed successfully."}
-
             </p>
-
           </div>
 
           {/* Progress */}
 
           {step !== "success" && (
-
             <div className="mb-8">
-
               <div className="flex items-center justify-between">
+                {[1, 2, 3].map((number) => {
+                  const active =
+                    getStepNumber() >= number;
 
-                {[1, 2, 3].map(
-                  (number) => {
-
-                    const active =
-                      getStepNumber() >=
-                      number;
-
-                    return (
-
+                  return (
+                    <div
+                      key={number}
+                      className="flex flex-1 items-center last:flex-none"
+                    >
                       <div
-                        key={number}
-                        className="flex flex-1 items-center last:flex-none"
+                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
+                          active
+                            ? "bg-blue-600 text-white"
+                            : "bg-white/10 text-slate-500"
+                        }`}
                       >
-
-                        <div
-                          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold transition ${
-                            active
-                              ? "bg-blue-600 text-white"
-                              : "bg-white/10 text-slate-500"
-                          }`}
-                        >
-                          {number}
-                        </div>
-
-                        {number < 3 && (
-
-                          <div
-                            className={`mx-2 h-px flex-1 transition ${
-                              getStepNumber() >
-                              number
-                                ? "bg-blue-600"
-                                : "bg-white/10"
-                            }`}
-                          />
-
-                        )}
-
+                        {number}
                       </div>
 
-                    );
-                  }
-                )}
-
+                      {number < 3 && (
+                        <div
+                          className={`mx-2 h-px flex-1 transition ${
+                            getStepNumber() > number
+                              ? "bg-blue-600"
+                              : "bg-white/10"
+                          }`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-
             </div>
-
           )}
 
           {/* ERROR */}
 
           {error && (
-
             <div className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-
               <div className="flex gap-2">
-
                 <svg
                   className="mt-0.5 h-5 w-5 shrink-0"
                   viewBox="0 0 24 24"
@@ -748,7 +661,6 @@ export default function ForgotPasswordPage() {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-
                   <circle
                     cx="12"
                     cy="12"
@@ -764,45 +676,31 @@ export default function ForgotPasswordPage() {
                     d="M12 16h.01"
                     strokeLinecap="round"
                   />
-
                 </svg>
 
-                <span>
-                  {error}
-                </span>
-
+                <span>{error}</span>
               </div>
-
             </div>
-
           )}
 
           {/* MESSAGE */}
 
-          {message &&
-            step !== "success" && (
-
-              <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
-
-                {message}
-
-              </div>
-
-            )}
+          {message && step !== "success" && (
+            <div className="mb-5 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+              {message}
+            </div>
+          )}
 
           {/* ==================================================
               MOBILE
               ================================================== */}
 
           {step === "mobile" && (
-
             <form
               onSubmit={handleSendOTP}
               className="space-y-5"
             >
-
               <div>
-
                 <label
                   htmlFor="mobile"
                   className="mb-2 block text-sm font-medium text-slate-200"
@@ -811,7 +709,6 @@ export default function ForgotPasswordPage() {
                 </label>
 
                 <div className="flex overflow-hidden rounded-xl border border-white/10 bg-black/20 transition focus-within:border-blue-500">
-
                   <div className="flex items-center border-r border-white/10 px-4 text-sm text-slate-400">
                     +91
                   </div>
@@ -833,9 +730,7 @@ export default function ForgotPasswordPage() {
                     }
                     className="w-full bg-transparent px-4 py-3.5 text-white outline-none placeholder:text-slate-600"
                   />
-
                 </div>
-
               </div>
 
               <button
@@ -843,35 +738,25 @@ export default function ForgotPasswordPage() {
                 disabled={loading}
                 className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-
                 {loading ? (
-
                   <>
                     <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     Sending OTP...
                   </>
-
                 ) : (
-
                   "Send OTP"
-
                 )}
-
               </button>
 
               <div className="text-center">
-
                 <Link
                   href="/login"
                   className="text-sm font-medium text-slate-400 transition hover:text-white"
                 >
                   ← Back to Login
                 </Link>
-
               </div>
-
             </form>
-
           )}
 
           {/* ==================================================
@@ -879,23 +764,18 @@ export default function ForgotPasswordPage() {
               ================================================== */}
 
           {step === "otp" && (
-
             <form
               onSubmit={handleVerifyOTP}
               className="space-y-6"
             >
-
               <div>
-
                 <label className="mb-3 block text-center text-sm font-medium text-slate-300">
                   Enter OTP
                 </label>
 
                 <div className="flex justify-center gap-2 sm:gap-3">
-
                   {otpDigits.map(
                     (digit, index) => (
-
                       <input
                         key={index}
                         id={`otp-${index}`}
@@ -922,12 +802,9 @@ export default function ForgotPasswordPage() {
                         }
                         className="h-12 w-10 rounded-xl border border-white/10 bg-black/20 text-center text-lg font-bold text-white outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 sm:h-14 sm:w-12"
                       />
-
                     )
                   )}
-
                 </div>
-
               </div>
 
               <button
@@ -938,38 +815,25 @@ export default function ForgotPasswordPage() {
                 }
                 className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-
                 {loading ? (
-
                   <>
                     <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     Verifying...
                   </>
-
                 ) : (
-
                   "Verify OTP"
-
                 )}
-
               </button>
 
               <div className="text-center text-sm">
-
                 {otpTimer > 0 ? (
-
                   <p className="text-slate-500">
-
-                    Resend OTP in{" "}
-
+                    Resend OTP{" "}
                     <span className="font-semibold text-slate-300">
-                      {otpTimer}s
+                      in {otpTimer}s
                     </span>
-
                   </p>
-
                 ) : (
-
                   <button
                     type="button"
                     onClick={handleResendOTP}
@@ -978,9 +842,7 @@ export default function ForgotPasswordPage() {
                   >
                     Resend OTP
                   </button>
-
                 )}
-
               </div>
 
               <button
@@ -990,9 +852,7 @@ export default function ForgotPasswordPage() {
               >
                 ← Change mobile number
               </button>
-
             </form>
-
           )}
 
           {/* ==================================================
@@ -1000,16 +860,13 @@ export default function ForgotPasswordPage() {
               ================================================== */}
 
           {step === "password" && (
-
             <form
               onSubmit={handleResetPassword}
               className="space-y-5"
             >
-
               {/* New password */}
 
               <div>
-
                 <label
                   htmlFor="newPassword"
                   className="mb-2 block text-sm font-medium text-slate-200"
@@ -1018,7 +875,6 @@ export default function ForgotPasswordPage() {
                 </label>
 
                 <div className="relative">
-
                   <input
                     id="newPassword"
                     type={
@@ -1046,23 +902,18 @@ export default function ForgotPasswordPage() {
                     }
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-white"
                   >
-                    {showPassword
-                      ? "🙈"
-                      : "👁"}
+                    {showPassword ? "🙈" : "👁"}
                   </button>
-
                 </div>
 
                 <p className="mt-2 text-xs text-slate-500">
                   Password must contain at least 6 characters.
                 </p>
-
               </div>
 
               {/* Confirm password */}
 
               <div>
-
                 <label
                   htmlFor="confirmPassword"
                   className="mb-2 block text-sm font-medium text-slate-200"
@@ -1071,7 +922,6 @@ export default function ForgotPasswordPage() {
                 </label>
 
                 <div className="relative">
-
                   <input
                     id="confirmPassword"
                     type={
@@ -1103,16 +953,13 @@ export default function ForgotPasswordPage() {
                       ? "🙈"
                       : "👁"}
                   </button>
-
                 </div>
-
               </div>
 
               {/* Match indicator */}
 
               {confirmPassword &&
                 newPassword && (
-
                   <div
                     className={`rounded-xl px-4 py-3 text-sm ${
                       newPassword ===
@@ -1121,14 +968,11 @@ export default function ForgotPasswordPage() {
                         : "bg-red-500/10 text-red-300"
                     }`}
                   >
-
                     {newPassword ===
                     confirmPassword
                       ? "✓ Passwords match"
                       : "✕ Passwords do not match"}
-
                   </div>
-
                 )}
 
               <button
@@ -1136,24 +980,16 @@ export default function ForgotPasswordPage() {
                 disabled={loading}
                 className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
-
                 {loading ? (
-
                   <>
                     <span className="mr-2 h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     Resetting Password...
                   </>
-
                 ) : (
-
                   "Reset Password"
-
                 )}
-
               </button>
-
             </form>
-
           )}
 
           {/* ==================================================
@@ -1161,13 +997,9 @@ export default function ForgotPasswordPage() {
               ================================================== */}
 
           {step === "success" && (
-
             <div className="text-center">
-
               <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-500/10">
-
                 <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/20">
-
                   <svg
                     className="h-8 w-8 text-emerald-400"
                     viewBox="0 0 24 24"
@@ -1175,17 +1007,13 @@ export default function ForgotPasswordPage() {
                     stroke="currentColor"
                     strokeWidth="2.5"
                   >
-
                     <path
                       d="M5 12l4 4L19 6"
                       strokeLinecap="round"
                       strokeLinejoin="round"
                     />
-
                   </svg>
-
                 </div>
-
               </div>
 
               <div className="mb-7 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
@@ -1198,19 +1026,14 @@ export default function ForgotPasswordPage() {
               >
                 Go to Login
               </Link>
-
             </div>
-
           )}
-
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-600">
           Your account security is important to us.
         </p>
-
       </div>
-
     </main>
   );
 }
