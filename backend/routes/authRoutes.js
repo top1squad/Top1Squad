@@ -1,7 +1,6 @@
 const express = require("express");
 const axios = require("axios");
 const passport = require("passport");
-
 const User = require("../models/User");
 
 const router = express.Router();
@@ -32,9 +31,73 @@ function getUserData(user) {
 // ======================================================
 
 function generateOtp() {
-  return Math.floor(
-    100000 + Math.random() * 900000
-  ).toString();
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+// ======================================================
+// GET REGISTRATION SESSION
+// ======================================================
+//
+// IMPORTANT:
+//
+// Frontend (Vercel) and backend (Render) are different
+// domains. Because of this, the browser may not always
+// send the original session cookie during /verify.
+//
+// We first check req.session normally.
+//
+// If the cookie/session is not available, we recover the
+// registration session directly from the session store
+// using registrationId.
+//
+// ======================================================
+
+function getRegistrationSession(req, registrationId) {
+  return new Promise((resolve, reject) => {
+    // First try the normal current session.
+    if (
+      req.session &&
+      req.session.pendingRegistration &&
+      req.sessionID === registrationId
+    ) {
+      return resolve({
+        session: req.session,
+        sessionId: req.sessionID,
+        currentSession: true,
+      });
+    }
+
+    // Recover session from session store.
+    if (
+      !registrationId ||
+      !req.sessionStore ||
+      typeof req.sessionStore.get !== "function"
+    ) {
+      return resolve(null);
+    }
+
+    req.sessionStore.get(
+      registrationId,
+      (error, storedSession) => {
+        if (error) {
+          return reject(error);
+        }
+
+        if (
+          !storedSession ||
+          !storedSession.pendingRegistration
+        ) {
+          return resolve(null);
+        }
+
+        return resolve({
+          session: storedSession,
+          sessionId: registrationId,
+          currentSession: false,
+        });
+      }
+    );
+  });
 }
 
 // ======================================================
@@ -317,38 +380,19 @@ router.post("/register", async (req, res) => {
     // ==================================================
     // STORE TEMPORARY REGISTRATION IN SESSION
     // ==================================================
-    //
-    // NO EXTRA FILE
-    // NO EXTRA MODEL
-    //
-    // Password is temporarily stored in the session
-    // until OTP verification.
-    //
-    // ==================================================
 
     req.session.pendingRegistration = {
       fullName: cleanFullName,
-
       username: cleanUsername,
-
       mobile: cleanMobile,
-
       email: cleanEmail,
-
       password: String(password),
-
       game: game,
-
       gameUid: cleanGameUid,
-
       upiId: cleanUpiId,
-
       termsAccepted: true,
-
       mobileOtp: otp,
-
       mobileOtpExpiresAt: otpExpiresAt,
-
       mobileOtpAttempts: 0,
     };
 
@@ -378,10 +422,7 @@ router.post("/register", async (req, res) => {
       console.log("======================================");
       console.log("SENDING OTP THROUGH HANUOTP");
       console.log("======================================");
-      console.log(
-        "Mobile:",
-        cleanMobile
-      );
+      console.log("Mobile:", cleanMobile);
 
       try {
         const response =
@@ -394,7 +435,6 @@ router.post("/register", async (req, res) => {
                 apikey: hanuOtpApiKey,
                 templatesid: "default",
               },
-
               timeout: 15000,
             }
           );
@@ -427,22 +467,16 @@ router.post("/register", async (req, res) => {
 
           return res.status(201).json({
             success: true,
-
             message:
               "OTP sent successfully to your mobile number.",
-
             registrationId:
               req.sessionID,
-
             mobile:
               cleanMobile,
-
             email:
               cleanEmail,
-
             username:
               cleanUsername,
-
             game:
               game,
           });
@@ -462,7 +496,6 @@ router.post("/register", async (req, res) => {
         return req.session.save(() => {
           return res.status(400).json({
             success: false,
-
             message:
               response.data?.message ||
               "Unable to send OTP. Please try again.",
@@ -483,7 +516,6 @@ router.post("/register", async (req, res) => {
         return req.session.save(() => {
           return res.status(502).json({
             success: false,
-
             message:
               "Unable to send OTP. Please try again.",
           });
@@ -521,6 +553,11 @@ router.post("/verify", async (req, res) => {
     console.log("OTP VERIFICATION REQUEST");
     console.log("======================================");
 
+    console.log(
+      "Registration ID received:",
+      registrationId
+    );
+
     // ==================================================
     // VALIDATION
     // ==================================================
@@ -552,13 +589,32 @@ router.post("/verify", async (req, res) => {
     }
 
     // ==================================================
-    // FIND SESSION REGISTRATION
+    // FIND REGISTRATION SESSION
+    // ==================================================
+    //
+    // FIX:
+    //
+    // Do NOT depend only on req.session.
+    //
+    // If the frontend does not send the original
+    // connect.sid cookie, recover the registration
+    // session from MongoDB/session store using
+    // registrationId.
+    //
     // ==================================================
 
-    const registration =
-      req.session.pendingRegistration;
+    const registrationSession =
+      await getRegistrationSession(
+        req,
+        registrationId
+      );
 
-    if (!registration) {
+    if (!registrationSession) {
+      console.log(
+        "Registration session NOT FOUND:",
+        registrationId
+      );
+
       return res.status(404).json({
         success: false,
         message:
@@ -566,20 +622,13 @@ router.post("/verify", async (req, res) => {
       });
     }
 
-    // ==================================================
-    // CHECK REGISTRATION ID
-    // ==================================================
+    console.log(
+      "Registration session FOUND:",
+      registrationSession.sessionId
+    );
 
-    if (
-      registrationId !==
-      req.sessionID
-    ) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Invalid registration session.",
-      });
-    }
+    const registration =
+      registrationSession.session.pendingRegistration;
 
     // ==================================================
     // OTP EXPIRY
@@ -589,15 +638,31 @@ router.post("/verify", async (req, res) => {
       registration.mobileOtpExpiresAt <
       Date.now()
     ) {
-      delete req.session.pendingRegistration;
+      delete registrationSession.session
+        .pendingRegistration;
 
-      return req.session.save(() => {
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP has expired. Please register again.",
+      if (
+        registrationSession.currentSession
+      ) {
+        return req.session.save(() => {
+          return res.status(400).json({
+            success: false,
+            message:
+              "OTP has expired. Please register again.",
+          });
         });
-      });
+      }
+
+      return req.sessionStore.destroy(
+        registrationSession.sessionId,
+        () => {
+          return res.status(400).json({
+            success: false,
+            message:
+              "OTP has expired. Please register again.",
+          });
+        }
+      );
     }
 
     // ==================================================
@@ -607,15 +672,31 @@ router.post("/verify", async (req, res) => {
     if (
       registration.mobileOtpAttempts >= 5
     ) {
-      delete req.session.pendingRegistration;
+      delete registrationSession.session
+        .pendingRegistration;
 
-      return req.session.save(() => {
-        return res.status(429).json({
-          success: false,
-          message:
-            "Maximum OTP attempts exceeded. Please register again.",
+      if (
+        registrationSession.currentSession
+      ) {
+        return req.session.save(() => {
+          return res.status(429).json({
+            success: false,
+            message:
+              "Maximum OTP attempts exceeded. Please register again.",
+          });
         });
-      });
+      }
+
+      return req.sessionStore.destroy(
+        registrationSession.sessionId,
+        () => {
+          return res.status(429).json({
+            success: false,
+            message:
+              "Maximum OTP attempts exceeded. Please register again.",
+          });
+        }
+      );
     }
 
     // ==================================================
@@ -627,18 +708,34 @@ router.post("/verify", async (req, res) => {
       cleanOtp
     ) {
       registration.mobileOtpAttempts =
-        (registration.mobileOtpAttempts || 0) +
-        1;
+        (registration.mobileOtpAttempts || 0) + 1;
 
-      req.session.pendingRegistration =
+      registrationSession.session.pendingRegistration =
         registration;
 
-      return req.session.save(() => {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid OTP.",
+      // Normal session.
+      if (
+        registrationSession.currentSession
+      ) {
+        return req.session.save(() => {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid OTP.",
+          });
         });
-      });
+      }
+
+      // Recovered session.
+      return req.sessionStore.set(
+        registrationSession.sessionId,
+        registrationSession.session,
+        () => {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid OTP.",
+          });
+        }
+      );
     }
 
     // ==================================================
@@ -652,14 +749,10 @@ router.post("/verify", async (req, res) => {
       });
 
     if (existingUsername) {
-      delete req.session.pendingRegistration;
-
-      return req.session.save(() => {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Username is already registered.",
-        });
+      return res.status(409).json({
+        success: false,
+        message:
+          "Username is already registered.",
       });
     }
 
@@ -674,14 +767,10 @@ router.post("/verify", async (req, res) => {
       });
 
     if (existingMobile) {
-      delete req.session.pendingRegistration;
-
-      return req.session.save(() => {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Mobile number is already registered.",
-        });
+      return res.status(409).json({
+        success: false,
+        message:
+          "Mobile number is already registered.",
       });
     }
 
@@ -696,14 +785,10 @@ router.post("/verify", async (req, res) => {
       });
 
     if (existingEmail) {
-      delete req.session.pendingRegistration;
-
-      return req.session.save(() => {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Email address is already registered.",
-        });
+      return res.status(409).json({
+        success: false,
+        message:
+          "Email address is already registered.",
       });
     }
 
@@ -728,14 +813,10 @@ router.post("/verify", async (req, res) => {
       );
 
     if (existingGameUid) {
-      delete req.session.pendingRegistration;
-
-      return req.session.save(() => {
-        return res.status(409).json({
-          success: false,
-          message:
-            `${registration.game} UID is already registered.`,
-        });
+      return res.status(409).json({
+        success: false,
+        message:
+          `${registration.game} UID is already registered.`,
       });
     }
 
@@ -789,7 +870,31 @@ router.post("/verify", async (req, res) => {
     // REMOVE TEMPORARY REGISTRATION
     // ==================================================
 
-    delete req.session.pendingRegistration;
+    delete registrationSession.session
+      .pendingRegistration;
+
+    // If this is the current browser session,
+    // save normally.
+    //
+    // If this was recovered from the store,
+    // update that stored session before login.
+    if (
+      !registrationSession.currentSession
+    ) {
+      await new Promise((resolve, reject) => {
+        req.sessionStore.set(
+          registrationSession.sessionId,
+          registrationSession.session,
+          (storeError) => {
+            if (storeError) {
+              return reject(storeError);
+            }
+
+            resolve();
+          }
+        );
+      });
+    }
 
     // ==================================================
     // LOGIN USER
@@ -849,10 +954,8 @@ router.post("/verify", async (req, res) => {
 
             return res.status(200).json({
               success: true,
-
               message:
                 "Account created and mobile verified successfully.",
-
               user:
                 getUserData(
                   registeredUser
@@ -922,13 +1025,23 @@ router.post(
               return next(loginError);
             }
 
-            return res.status(200).json({
-              success: true,
-              message:
-                "Login successful",
-              user:
-                getUserData(user),
-            });
+            req.session.save(
+              (sessionError) => {
+                if (sessionError) {
+                  return next(
+                    sessionError
+                  );
+                }
+
+                return res.status(200).json({
+                  success: true,
+                  message:
+                    "Login successful",
+                  user:
+                    getUserData(user),
+                });
+              }
+            );
           }
         );
       }
