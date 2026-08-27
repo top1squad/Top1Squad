@@ -7,10 +7,8 @@ import { FormEvent, useEffect, useState } from "react";
 // API URL
 // ======================================================
 
-const RAW_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
-
-const API_URL = RAW_API_URL.replace(/\/+$/, "");
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "") || "";
 
 // ======================================================
 // STEP
@@ -116,6 +114,22 @@ export default function ForgotPasswordPage() {
   }
 
   // ====================================================
+  // CHECK API URL
+  // ====================================================
+
+  function hasApiUrl() {
+    if (!API_URL) {
+      setError(
+        "API URL is not configured. Please set NEXT_PUBLIC_API_URL."
+      );
+
+      return false;
+    }
+
+    return true;
+  }
+
+  // ====================================================
   // EXTRACT RESET TOKEN
   // ====================================================
 
@@ -155,6 +169,10 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    if (!hasApiUrl()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -165,19 +183,17 @@ export default function ForgotPasswordPage() {
       console.log(
         "======================================"
       );
+
       console.log("Mobile:", cleanMobile);
 
       const response = await fetch(
         `${API_URL}/api/auth/forgot-password/send-otp`,
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json",
           },
-
           credentials: "include",
-
           body: JSON.stringify({
             mobile: cleanMobile,
           }),
@@ -219,12 +235,7 @@ export default function ForgotPasswordPage() {
       );
 
       // ==================================================
-      // IMPORTANT
-      // ==================================================
-      //
-      // The backend MUST return resetToken if the
-      // verify-otp endpoint requires it in the body.
-      //
+      // TOKEN REQUIRED
       // ==================================================
 
       if (!receivedResetToken) {
@@ -432,6 +443,7 @@ export default function ForgotPasswordPage() {
       setError(
         "Please enter the complete 6-digit OTP."
       );
+
       return;
     }
 
@@ -451,15 +463,21 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    if (!hasApiUrl()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
       console.log(
         "======================================"
       );
+
       console.log(
         "FORGOT PASSWORD OTP VERIFICATION"
       );
+
       console.log(
         "======================================"
       );
@@ -485,13 +503,10 @@ export default function ForgotPasswordPage() {
         `${API_URL}/api/auth/forgot-password/verify-otp`,
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json",
           },
-
           credentials: "include",
-
           body: JSON.stringify({
             mobile: mobile.trim(),
             otp,
@@ -533,14 +548,7 @@ export default function ForgotPasswordPage() {
         );
 
         setResetToken(newResetToken);
-      }
-
-      // ==================================================
-      // KEEP EXISTING TOKEN IF BACKEND DOES NOT RETURN
-      // ONE
-      // ==================================================
-
-      if (!newResetToken) {
+      } else {
         console.log(
           "Verify OTP did not return a new token."
         );
@@ -607,6 +615,7 @@ export default function ForgotPasswordPage() {
       setError(
         "Please enter a new password."
       );
+
       return;
     }
 
@@ -614,6 +623,7 @@ export default function ForgotPasswordPage() {
       setError(
         "Password must be at least 6 characters."
       );
+
       return;
     }
 
@@ -621,6 +631,7 @@ export default function ForgotPasswordPage() {
       setError(
         "Please confirm your password."
       );
+
       return;
     }
 
@@ -628,6 +639,7 @@ export default function ForgotPasswordPage() {
       setError(
         "Passwords do not match."
       );
+
       return;
     }
 
@@ -645,15 +657,21 @@ export default function ForgotPasswordPage() {
       return;
     }
 
+    if (!hasApiUrl()) {
+      return;
+    }
+
     setLoading(true);
 
     try {
       console.log(
         "======================================"
       );
+
       console.log(
         "FORGOT PASSWORD RESET"
       );
+
       console.log(
         "======================================"
       );
@@ -669,13 +687,10 @@ export default function ForgotPasswordPage() {
         `${API_URL}/api/auth/forgot-password/reset`,
         {
           method: "POST",
-
           headers: {
             "Content-Type": "application/json",
           },
-
           credentials: "include",
-
           body: JSON.stringify({
             resetToken,
             newPassword,
@@ -819,6 +834,9 @@ export default function ForgotPasswordPage() {
     setMessage("");
 
     setOtpTimer(60);
+
+    setShowPassword(false);
+    setShowConfirmPassword(false);
 
     setStep("mobile");
   }
@@ -1116,7 +1134,8 @@ export default function ForgotPasswordPage() {
                 type="submit"
                 disabled={
                   loading ||
-                  otpDigits.join("").length !== 6
+                  otpDigits.join("").length !==
+                    6
                 }
                 className="flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3.5 font-semibold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -1220,7 +1239,8 @@ export default function ForgotPasswordPage() {
                 </div>
 
                 <p className="mt-2 text-xs text-slate-500">
-                  Password must contain at least 6 characters.
+                  Password must contain at least
+                  6 characters.
                 </p>
               </div>
 

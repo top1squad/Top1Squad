@@ -2,6 +2,7 @@ const express = require("express");
 const axios = require("axios");
 const crypto = require("crypto");
 const passport = require("passport");
+
 const User = require("../models/User");
 
 const router = express.Router();
@@ -37,6 +38,10 @@ function generateResetToken() {
 
 function saveSession(req) {
   return new Promise((resolve, reject) => {
+    if (!req.session) {
+      return reject(new Error("Session is not available."));
+    }
+
     req.session.save((error) => {
       if (error) {
         return reject(error);
@@ -63,7 +68,7 @@ function getRegistrationSession(req, registrationId) {
 
     if (
       req.session &&
-      req.sessionID === registrationId &&
+      req.sessionID === String(registrationId) &&
       req.session.pendingRegistration
     ) {
       return resolve({
@@ -133,6 +138,15 @@ function saveRegistrationSession(req, registrationSession) {
     }
 
     // Recovered session
+    if (
+      !req.sessionStore ||
+      typeof req.sessionStore.set !== "function"
+    ) {
+      return reject(
+        new Error("Session store is not available.")
+      );
+    }
+
     req.sessionStore.set(
       registrationSession.sessionId,
       registrationSession.session,
@@ -153,6 +167,7 @@ function destroyRegistrationSession(req, registrationSession) {
       return resolve();
     }
 
+    // Current session
     if (registrationSession.currentSession) {
       return req.session.destroy((error) => {
         if (error) {
@@ -161,6 +176,16 @@ function destroyRegistrationSession(req, registrationSession) {
 
         resolve();
       });
+    }
+
+    // Recovered session
+    if (
+      !req.sessionStore ||
+      typeof req.sessionStore.destroy !== "function"
+    ) {
+      return reject(
+        new Error("Session store is not available.")
+      );
     }
 
     req.sessionStore.destroy(
@@ -232,6 +257,15 @@ function saveResetSession(req, resetSession) {
       );
     }
 
+    if (
+      !req.sessionStore ||
+      typeof req.sessionStore.set !== "function"
+    ) {
+      return reject(
+        new Error("Session store is not available.")
+      );
+    }
+
     req.sessionStore.set(
       resetSession.sessionId,
       resetSession.session,
@@ -252,6 +286,15 @@ function destroyResetSession(req, resetSession) {
       return resolve();
     }
 
+    if (
+      !req.sessionStore ||
+      typeof req.sessionStore.destroy !== "function"
+    ) {
+      return reject(
+        new Error("Session store is not available.")
+      );
+    }
+
     req.sessionStore.destroy(
       resetSession.sessionId,
       (error) => {
@@ -267,15 +310,6 @@ function destroyResetSession(req, resetSession) {
 
 // ======================================================
 // GET RESET TOKEN FROM REQUEST
-// ======================================================
-//
-// Supports:
-//
-// 1. req.body.resetToken
-// 2. req.query.resetToken
-// 3. x-reset-token header
-//
-// This makes the backend more flexible.
 // ======================================================
 
 function getResetTokenFromRequest(req) {
@@ -369,7 +403,8 @@ router.post("/register", async (req, res) => {
     ) {
       return res.status(400).json({
         success: false,
-        message: "Please enter a valid email address.",
+        message:
+          "Please enter a valid email address.",
       });
     }
 
@@ -953,20 +988,28 @@ router.post("/verify", async (req, res) => {
     const user = new User({
       fullName:
         registration.fullName,
+
       username:
         registration.username,
+
       mobile:
         registration.mobile,
+
       email:
         registration.email,
+
       game:
         registration.game,
+
       gameUid:
         registration.gameUid,
+
       upiId:
         registration.upiId,
+
       termsAccepted:
         registration.termsAccepted,
+
       role: "user",
     });
 
@@ -1543,6 +1586,8 @@ router.patch(
           cleanUid;
       }
 
+      // Keep the main gameUid synchronized
+      // when this is the user's selected game.
       if (user.game === game) {
         user.gameUid =
           cleanUid;
@@ -1722,26 +1767,32 @@ router.post(
       console.log("======================================");
       console.log("FORGOT PASSWORD OTP");
       console.log("======================================");
+
       console.log(
         "Mobile:",
         cleanMobile
       );
+
       console.log(
         "Reset Token:",
         resetToken
       );
+
       console.log(
         "OTP:",
         otp
       );
+
       console.log(
         "OTP expires:",
         new Date(
           otpExpiresAt
         ).toISOString()
       );
+
       console.log(
-        "======================================");
+        "======================================"
+      );
 
       // ==================================================
       // SEND OTP THROUGH HANUOTP
@@ -1786,13 +1837,10 @@ router.post(
         ) {
           return res.status(200).json({
             success: true,
-
             message:
               "OTP sent successfully.",
-
             resetToken:
               resetToken,
-
             mobile:
               cleanMobile,
           });
@@ -1868,24 +1916,6 @@ router.post(
   "/forgot-password/verify-otp",
   async (req, res) => {
     try {
-      // ==================================================
-      // FRONTEND CAN SEND:
-      //
-      // {
-      //   otp: "123456",
-      //   resetToken: "..."
-      // }
-      //
-      // OR:
-      //
-      // Header:
-      // x-reset-token: "..."
-      //
-      // OR:
-      //
-      // ?resetToken=...
-      // ==================================================
-
       const mobileOtp =
         req.body.otp ||
         req.body.mobileOtp;
@@ -2103,8 +2133,7 @@ router.post(
       resetData.verifiedAt =
         Date.now();
 
-      // IMPORTANT:
-      // Remove OTP after successful verification.
+      // Remove OTP after verification.
       resetData.otp = null;
 
       resetSession.session
@@ -2139,10 +2168,8 @@ router.post(
 
       return res.status(200).json({
         success: true,
-
         message:
           "OTP verified successfully.",
-
         resetToken:
           resetToken,
       });
@@ -2170,15 +2197,6 @@ router.post(
   "/forgot-password/reset",
   async (req, res) => {
     try {
-      // ==================================================
-      // FRONTEND SENDS:
-      //
-      // {
-      //   newPassword: "...",
-      //   resetToken: "..."
-      // }
-      // ==================================================
-
       const password =
         req.body.newPassword ||
         req.body.password;
@@ -2311,7 +2329,7 @@ router.post(
       }
 
       // ==================================================
-      // OPTIONAL VERIFIED SESSION AGE LIMIT
+      // VERIFIED SESSION AGE LIMIT
       // ==================================================
 
       if (
@@ -2380,8 +2398,6 @@ router.post(
 
       // ==================================================
       // DESTROY RESET TOKEN
-      //
-      // TOKEN CAN ONLY BE USED ONCE
       // ==================================================
 
       try {
