@@ -1,2817 +1,816 @@
-const express = require("express");
-const axios = require("axios");
-const crypto = require("crypto");
-const passport = require("passport");
-const User = require("../models/User");
+"use client";
 
-const router = express.Router();
+import Link from "next/link";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 
 // ======================================================
-// HELPERS
+// API CONFIG
 // ======================================================
 
-function getUserData(user) {
-  if (!user) {
-    return null;
-  }
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
 
-  return {
-    id: user._id,
-    username: user.username || "",
-    fullName: user.fullName || "",
-    mobile: user.mobile || "",
-    email: user.email || "",
-    game: user.game || "",
-    gameUid: user.gameUid || "",
-    upiId: user.upiId || "",
+const API_URL = RAW_API_URL
+  .replace(/\/+$/, "")
+  .replace(/\/api$/, "");
+
+// ======================================================
+// TYPES
+// ======================================================
+
+type LoggedInUser = {
+  _id?: string;
+  id?: string;
+  username?: string;
+  fullName?: string;
+  email?: string;
+  mobile?: string;
+  game?: string;
+  gameUid?: string;
+  bgmiUid?: string;
+  freeFireUid?: string;
+  upiId?: string;
+};
+
+type LoginResponse = {
+  success?: boolean;
+  authenticated?: boolean;
+  message?: string;
+  token?: string;
+  accessToken?: string;
+  user?: LoggedInUser;
+};
+
+type MeResponse = {
+  success?: boolean;
+  authenticated?: boolean;
+  message?: string;
+  user?: LoggedInUser | null;
+};
+
+// ======================================================
+// LOGIN FORM
+// ======================================================
+
+function LoginForm() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+    rememberMe: false,
+  });
+
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // ======================================================
+  // INPUT CHANGE
+  // ======================================================
+
+  const handleChange = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const { name, value, type, checked } = event.target;
+
+    setFormData((previous) => ({
+      ...previous,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+
+    if (error) {
+      setError("");
+    }
   };
-}
 
-function generateOtp() {
-  return Math.floor(
-    100000 + Math.random() * 900000
-  ).toString();
-}
+  // ======================================================
+  // REDIRECT DESTINATION
+  // ======================================================
 
-function generateResetToken() {
-  return crypto
-    .randomBytes(32)
-    .toString("hex");
-}
+  const getDestination = () => {
+    const redirect = searchParams.get("redirect");
 
-function saveSession(req) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!req.session) {
-        return reject(
-          new Error(
-            "Session is not available."
-          )
-        );
-      }
-
-      req.session.save((error) => {
-        if (error) {
-          return reject(error);
-        }
-
-        resolve();
-      });
+    if (
+      redirect &&
+      redirect.startsWith("/") &&
+      !redirect.startsWith("//")
+    ) {
+      return redirect;
     }
-  );
-}
 
-// ======================================================
-// REGISTRATION SESSION HELPERS
-// ======================================================
+    return "/";
+  };
 
-function getRegistrationSession(
-  req,
-  registrationId
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!registrationId) {
-        return resolve(null);
-      }
+  // ======================================================
+  // LOGIN
+  // ======================================================
 
-      // ------------------------------------------------
-      // Current session
-      // ------------------------------------------------
+  const handleSubmit = async (
+    event: React.FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
 
-      if (
-        req.session &&
-        req.sessionID ===
-          String(registrationId) &&
-        req.session.pendingRegistration
-      ) {
-        return resolve({
-          session: req.session,
-          sessionId: req.sessionID,
-          currentSession: true,
-        });
-      }
+    setError("");
+    setSuccess("");
 
-      // ------------------------------------------------
-      // Session store recovery
-      // ------------------------------------------------
+    const username = formData.username.trim().toLowerCase();
+    const password = formData.password;
 
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.get !==
-          "function"
-      ) {
-        return resolve(null);
-      }
-
-      req.sessionStore.get(
-        String(registrationId),
-        (
-          error,
-          storedSession
-        ) => {
-          if (error) {
-            console.error(
-              "Registration session store error:",
-              error
-            );
-
-            return reject(error);
-          }
-
-          if (
-            !storedSession ||
-            !storedSession.pendingRegistration
-          ) {
-            return resolve(null);
-          }
-
-          return resolve({
-            session: storedSession,
-            sessionId:
-              String(registrationId),
-            currentSession: false,
-          });
-        }
-      );
+    if (!username) {
+      setError("Please enter your username.");
+      return;
     }
-  );
-}
 
-function saveRegistrationSession(
-  req,
-  registrationSession
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!registrationSession) {
-        return reject(
-          new Error(
-            "Registration session missing."
-          )
-        );
-      }
-
-      // Current session
-      if (
-        registrationSession.currentSession
-      ) {
-        return req.session.save(
-          (error) => {
-            if (error) {
-              return reject(error);
-            }
-
-            resolve();
-          }
-        );
-      }
-
-      // Recovered session
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.set !==
-          "function"
-      ) {
-        return reject(
-          new Error(
-            "Session store is not available."
-          )
-        );
-      }
-
-      req.sessionStore.set(
-        registrationSession.sessionId,
-        registrationSession.session,
-        (error) => {
-          if (error) {
-            return reject(error);
-          }
-
-          resolve();
-        }
-      );
+    if (!password) {
+      setError("Please enter your password.");
+      return;
     }
-  );
-}
 
-function destroyRegistrationSession(
-  req,
-  registrationSession
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!registrationSession) {
-        return resolve();
-      }
+    setLoading(true);
 
-      // Current session
-      if (
-        registrationSession.currentSession
-      ) {
-        return req.session.destroy(
-          (error) => {
-            if (error) {
-              return reject(error);
-            }
-
-            resolve();
-          }
-        );
-      }
-
-      // Recovered session
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.destroy !==
-          "function"
-      ) {
-        return reject(
-          new Error(
-            "Session store is not available."
-          )
-        );
-      }
-
-      req.sessionStore.destroy(
-        registrationSession.sessionId,
-        (error) => {
-          if (error) {
-            return reject(error);
-          }
-
-          resolve();
-        }
-      );
-    }
-  );
-}
-
-// ======================================================
-// FORGOT PASSWORD RESET SESSION HELPERS
-// ======================================================
-
-function getResetSession(
-  req,
-  resetToken
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!resetToken) {
-        return resolve(null);
-      }
-
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.get !==
-          "function"
-      ) {
-        return reject(
-          new Error(
-            "Session store is not available."
-          )
-        );
-      }
-
-      req.sessionStore.get(
-        String(resetToken),
-        (
-          error,
-          storedSession
-        ) => {
-          if (error) {
-            console.error(
-              "Reset session store get error:",
-              error
-            );
-
-            return reject(error);
-          }
-
-          if (!storedSession) {
-            return resolve(null);
-          }
-
-          if (
-            !storedSession.forgotPassword
-          ) {
-            return resolve(null);
-          }
-
-          return resolve({
-            session: storedSession,
-            sessionId:
-              String(resetToken),
-          });
-        }
-      );
-    }
-  );
-}
-
-function saveResetSession(
-  req,
-  resetSession
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!resetSession) {
-        return reject(
-          new Error(
-            "Reset session missing."
-          )
-        );
-      }
-
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.set !==
-          "function"
-      ) {
-        return reject(
-          new Error(
-            "Session store is not available."
-          )
-        );
-      }
-
-      req.sessionStore.set(
-        resetSession.sessionId,
-        resetSession.session,
-        (error) => {
-          if (error) {
-            return reject(error);
-          }
-
-          resolve();
-        }
-      );
-    }
-  );
-}
-
-function destroyResetSession(
-  req,
-  resetSession
-) {
-  return new Promise(
-    (resolve, reject) => {
-      if (!resetSession) {
-        return resolve();
-      }
-
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.destroy !==
-          "function"
-      ) {
-        return reject(
-          new Error(
-            "Session store is not available."
-          )
-        );
-      }
-
-      req.sessionStore.destroy(
-        resetSession.sessionId,
-        (error) => {
-          if (error) {
-            return reject(error);
-          }
-
-          resolve();
-        }
-      );
-    }
-  );
-}
-
-// ======================================================
-// GET RESET TOKEN FROM REQUEST
-// ======================================================
-
-function getResetTokenFromRequest(
-  req
-) {
-  const bodyToken =
-    req.body &&
-    req.body.resetToken
-      ? req.body.resetToken
-      : null;
-
-  const queryToken =
-    req.query &&
-    req.query.resetToken
-      ? req.query.resetToken
-      : null;
-
-  const headerToken =
-    req.headers["x-reset-token"] ||
-    null;
-
-  return String(
-    bodyToken ||
-      queryToken ||
-      headerToken ||
-      ""
-  ).trim();
-}
-
-// ======================================================
-// REGISTER
-// POST /api/auth/register
-// ======================================================
-
-router.post(
-  "/register",
-  async (req, res) => {
     try {
-      const {
-        fullName,
-        username,
-        mobile,
-        email,
-        password,
-        game,
-        gameUid,
-        upiId,
-        termsAccepted,
-      } = req.body;
-
-      console.log("");
-      console.log(
-        "======================================"
-      );
-      console.log(
-        "REGISTRATION REQUEST"
-      );
-      console.log(
-        "======================================"
-      );
-
       // ==================================================
-      // VALIDATION
+      // LOGIN API
       // ==================================================
 
-      if (
-        !fullName ||
-        !String(fullName).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Full name is required.",
-        });
-      }
+      const loginUrl = `${API_URL}/api/auth/login`;
 
-      if (
-        !username ||
-        !String(username).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Username is required.",
-        });
-      }
+      console.log("========================================");
+      console.log("LOGIN REQUEST");
+      console.log("API URL:", loginUrl);
+      console.log("USERNAME:", username);
+      console.log("REMEMBER ME:", formData.rememberMe);
+      console.log("========================================");
 
-      if (
-        !mobile ||
-        !/^[6-9][0-9]{9}$/.test(
-          String(mobile).trim()
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid 10-digit mobile number.",
-        });
-      }
+      const response = await fetch(loginUrl, {
+        method: "POST",
 
-      if (
-        !email ||
-        !String(email).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Email is required.",
-        });
-      }
+        // VERY IMPORTANT FOR SESSION COOKIE
+        credentials: "include",
 
-      if (
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-          String(email).trim()
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid email address.",
-        });
-      }
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
 
-      if (!password) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password is required.",
-        });
-      }
+        cache: "no-store",
 
-      if (
-        String(password).length < 6
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password must be at least 6 characters.",
-        });
-      }
+        body: JSON.stringify({
+          username,
+          password,
+          rememberMe: formData.rememberMe,
+        }),
+      });
 
-      if (!game) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Game is required.",
-        });
-      }
+      const responseText = await response.text();
 
-      if (
-        !["BGMI", "Free Fire"].includes(
-          game
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Game must be BGMI or Free Fire.",
-        });
-      }
+      let data: LoginResponse = {};
 
-      if (
-        !gameUid ||
-        !String(gameUid).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Game UID is required.",
-        });
-      }
-
-      if (
-        !upiId ||
-        !String(upiId).trim()
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "UPI ID is required.",
-        });
-      }
-
-      if (
-        !/^[\w.-]+@[\w.-]+$/.test(
-          String(upiId).trim()
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid UPI ID.",
-        });
-      }
-
-      if (!termsAccepted) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please accept the Terms & Conditions.",
-        });
-      }
-
-      // ==================================================
-      // NORMALIZE
-      // ==================================================
-
-      const cleanFullName =
-        String(fullName).trim();
-
-      const cleanUsername =
-        String(username)
-          .trim()
-          .toLowerCase();
-
-      const cleanMobile =
-        String(mobile).trim();
-
-      const cleanEmail =
-        String(email)
-          .trim()
-          .toLowerCase();
-
-      const cleanGameUid =
-        String(gameUid).trim();
-
-      const cleanUpiId =
-        String(upiId)
-          .trim()
-          .toLowerCase();
-
-      // ==================================================
-      // HANUOTP API KEY
-      // ==================================================
-
-      const hanuOtpApiKey =
-        process.env.HANUOTP_API_KEY;
-
-      if (!hanuOtpApiKey) {
+      try {
+        data = JSON.parse(responseText);
+      } catch {
         console.error(
-          "HANUOTP_API_KEY is missing."
+          "LOGIN API RETURNED NON-JSON:",
+          responseText
         );
-
-        return res.status(500).json({
-          success: false,
-          message:
-            "OTP service is not configured.",
-        });
       }
 
-      // ==================================================
-      // CHECK USERNAME
-      // ==================================================
-
-      const existingUsername =
-        await User.findOne({
-          username:
-            cleanUsername,
-        });
-
-      if (existingUsername) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Username is already registered.",
-        });
-      }
+      console.log("LOGIN RESPONSE:", {
+        status: response.status,
+        data,
+      });
 
       // ==================================================
-      // CHECK MOBILE
+      // LOGIN FAILED
       // ==================================================
 
-      const existingMobile =
-        await User.findOne({
-          mobile: cleanMobile,
-        });
-
-      if (existingMobile) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Mobile number is already registered.",
-        });
-      }
-
-      // ==================================================
-      // CHECK EMAIL
-      // ==================================================
-
-      const existingEmail =
-        await User.findOne({
-          email: cleanEmail,
-        });
-
-      if (existingEmail) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Email address is already registered.",
-        });
-      }
-
-      // ==================================================
-      // CHECK GAME UID
-      // ==================================================
-
-      const gameUidQuery =
-        game === "BGMI"
-          ? {
-              bgmiUid:
-                cleanGameUid,
-            }
-          : {
-              freeFireUid:
-                cleanGameUid,
-            };
-
-      const existingGameUid =
-        await User.findOne(
-          gameUidQuery
+      if (!response.ok || data.success === false) {
+        setError(
+          data.message || "Invalid username or password."
         );
-
-      if (existingGameUid) {
-        return res.status(409).json({
-          success: false,
-          message:
-            `${game} UID is already registered.`,
-        });
+        return;
       }
 
       // ==================================================
-      // GENERATE OTP
+      // LOGIN SUCCESS
       // ==================================================
 
-      const otp = generateOtp();
+      if (!data.user) {
+        console.warn(
+          "Login succeeded but no user object was returned."
+        );
+      }
 
-      const otpExpiresAt =
-        Date.now() +
-        10 * 60 * 1000;
+      console.log("========================================");
+      console.log("LOGIN SUCCESS");
+      console.log("USER:", data.user);
+      console.log("========================================");
 
-      console.log(
-        "Generated OTP:",
-        otp
-      );
-
-      console.log(
-        "Mobile:",
-        cleanMobile
-      );
-
-      // ==================================================
-      // STORE REGISTRATION DATA
-      // ==================================================
-
-      req.session.pendingRegistration =
-        {
-          fullName:
-            cleanFullName,
-
-          username:
-            cleanUsername,
-
-          mobile:
-            cleanMobile,
-
-          email:
-            cleanEmail,
-
-          password:
-            String(password),
-
-          game,
-
-          gameUid:
-            cleanGameUid,
-
-          upiId:
-            cleanUpiId,
-
-          termsAccepted: true,
-
-          mobileOtp:
-            otp,
-
-          mobileOtpExpiresAt:
-            otpExpiresAt,
-
-          mobileOtpAttempts: 0,
-        };
-
-      // ==================================================
-      // SAVE SESSION
-      // ==================================================
-
-      await saveSession(req);
-
-      const registrationId =
-        req.sessionID;
-
-      console.log(
-        "Registration session created:",
-        registrationId
+      setSuccess(
+        `Welcome back${
+          data.user?.username
+            ? `, ${data.user.username}`
+            : ""
+        }!`
       );
 
       // ==================================================
-      // SEND OTP
+      // OPTIONAL SESSION CHECK
+      //
+      // We do NOT make failure of /me block login.
+      // The login endpoint itself is authoritative.
       // ==================================================
 
       try {
-        const response =
-          await axios.get(
-            "https://api.hanuotp.in/sms-otp.php",
-            {
-              params: {
-                number:
-                  cleanMobile,
+        const meUrl = `${API_URL}/api/auth/me`;
 
-                OTP: otp,
+        console.log("CHECKING SESSION:", meUrl);
 
-                apikey:
-                  hanuOtpApiKey,
+        const meResponse = await fetch(meUrl, {
+          method: "GET",
 
-                templatesid:
-                  "default",
-              },
+          credentials: "include",
 
-              timeout: 15000,
-            }
-          );
-
-        console.log(
-          "HanuOTP response:",
-          response.data
-        );
-
-        if (
-          response.data &&
-          response.data.status ===
-            "success"
-        ) {
-          return res.status(201).json({
-            success: true,
-
-            message:
-              "OTP sent successfully to your mobile number.",
-
-            registrationId,
-
-            mobile:
-              cleanMobile,
-
-            email:
-              cleanEmail,
-
-            username:
-              cleanUsername,
-
-            game,
-          });
-        }
-
-        console.error(
-          "HanuOTP rejected request:",
-          response.data
-        );
-
-        delete req.session
-          .pendingRegistration;
-
-        await saveSession(req);
-
-        return res.status(400).json({
-          success: false,
-
-          message:
-            response.data?.message ||
-            "Unable to send OTP. Please try again.",
-        });
-      } catch (otpError) {
-        console.error(
-          "HanuOTP request error:",
-          otpError.response
-            ?.data ||
-            otpError.message
-        );
-
-        delete req.session
-          .pendingRegistration;
-
-        await saveSession(req);
-
-        return res.status(502).json({
-          success: false,
-
-          message:
-            "Unable to send OTP. Please try again.",
-        });
-      }
-    } catch (error) {
-      console.error(
-        "Register error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-
-        message:
-          "Registration failed. Please try again.",
-      });
-    }
-  }
-);
-
-// ======================================================
-// VERIFY REGISTRATION OTP
-// POST /api/auth/verify
-// ======================================================
-
-router.post(
-  "/verify",
-  async (req, res) => {
-    try {
-      const {
-        registrationId,
-        mobileOtp,
-      } = req.body;
-
-      console.log("");
-      console.log(
-        "======================================"
-      );
-      console.log(
-        "OTP VERIFICATION REQUEST"
-      );
-      console.log(
-        "======================================"
-      );
-
-      console.log(
-        "Registration ID received:",
-        registrationId
-      );
-
-      console.log(
-        "Current request session:",
-        req.sessionID
-      );
-
-      if (!registrationId) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Registration ID is required.",
-        });
-      }
-
-      if (!mobileOtp) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP is required.",
-        });
-      }
-
-      const cleanOtp =
-        String(mobileOtp).trim();
-
-      if (!/^\d{6}$/.test(cleanOtp)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid 6-digit OTP.",
-        });
-      }
-
-      // ==================================================
-      // RECOVER REGISTRATION SESSION
-      // ==================================================
-
-      const registrationSession =
-        await getRegistrationSession(
-          req,
-          String(registrationId)
-        );
-
-      if (!registrationSession) {
-        console.error(
-          "Registration session NOT FOUND:",
-          registrationId
-        );
-
-        return res.status(404).json({
-          success: false,
-          message:
-            "Registration session not found or expired. Please register again.",
-        });
-      }
-
-      const registration =
-        registrationSession.session
-          .pendingRegistration;
-
-      if (!registration) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Registration data not found. Please register again.",
-        });
-      }
-
-      // ==================================================
-      // OTP EXPIRY
-      // ==================================================
-
-      if (
-        !registration.mobileOtpExpiresAt ||
-        registration.mobileOtpExpiresAt <
-          Date.now()
-      ) {
-        try {
-          await destroyRegistrationSession(
-            req,
-            registrationSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "OTP expired session cleanup error:",
-            destroyError
-          );
-        }
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP has expired. Please register again.",
-        });
-      }
-
-      // ==================================================
-      // OTP ATTEMPTS
-      // ==================================================
-
-      const attempts =
-        Number(
-          registration.mobileOtpAttempts ||
-            0
-        );
-
-      if (attempts >= 5) {
-        try {
-          await destroyRegistrationSession(
-            req,
-            registrationSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "OTP attempts cleanup error:",
-            destroyError
-          );
-        }
-
-        return res.status(429).json({
-          success: false,
-          message:
-            "Maximum OTP attempts exceeded. Please register again.",
-        });
-      }
-
-      // ==================================================
-      // CHECK OTP
-      // ==================================================
-
-      if (
-        String(
-          registration.mobileOtp
-        ) !== cleanOtp
-      ) {
-        registration.mobileOtpAttempts =
-          attempts + 1;
-
-        registrationSession.session
-          .pendingRegistration =
-          registration;
-
-        await saveRegistrationSession(
-          req,
-          registrationSession
-        );
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid OTP.",
-        });
-      }
-
-      console.log(
-        "OTP MATCHED SUCCESSFULLY"
-      );
-
-      // ==================================================
-      // CHECK USERNAME AGAIN
-      // ==================================================
-
-      const existingUsername =
-        await User.findOne({
-          username:
-            registration.username,
-        });
-
-      if (existingUsername) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Username is already registered.",
-        });
-      }
-
-      // ==================================================
-      // CHECK MOBILE AGAIN
-      // ==================================================
-
-      const existingMobile =
-        await User.findOne({
-          mobile:
-            registration.mobile,
-        });
-
-      if (existingMobile) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Mobile number is already registered.",
-        });
-      }
-
-      // ==================================================
-      // CHECK EMAIL AGAIN
-      // ==================================================
-
-      const existingEmail =
-        await User.findOne({
-          email:
-            registration.email,
-        });
-
-      if (existingEmail) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Email address is already registered.",
-        });
-      }
-
-      // ==================================================
-      // CHECK GAME UID AGAIN
-      // ==================================================
-
-      const gameUidQuery =
-        registration.game === "BGMI"
-          ? {
-              bgmiUid:
-                registration.gameUid,
-            }
-          : {
-              freeFireUid:
-                registration.gameUid,
-            };
-
-      const existingGameUid =
-        await User.findOne(
-          gameUidQuery
-        );
-
-      if (existingGameUid) {
-        return res.status(409).json({
-          success: false,
-          message:
-            `${registration.game} UID is already registered.`,
-        });
-      }
-
-      // ==================================================
-      // CREATE USER
-      // ==================================================
-
-      const user = new User({
-        fullName:
-          registration.fullName,
-
-        username:
-          registration.username,
-
-        mobile:
-          registration.mobile,
-
-        email:
-          registration.email,
-
-        game:
-          registration.game,
-
-        gameUid:
-          registration.gameUid,
-
-        upiId:
-          registration.upiId,
-
-        termsAccepted:
-          registration.termsAccepted,
-
-        role: "user",
-      });
-
-      // ==================================================
-      // CREATE PASSWORD
-      // ==================================================
-
-      const registeredUser =
-        await User.register(
-          user,
-          registration.password
-        );
-
-      console.log(
-        "USER CREATED:",
-        registeredUser.username
-      );
-
-      // ==================================================
-      // REMOVE TEMP REGISTRATION DATA
-      // ==================================================
-
-      registrationSession.session
-        .pendingRegistration =
-        undefined;
-
-      try {
-        await saveRegistrationSession(
-          req,
-          registrationSession
-        );
-      } catch (
-        cleanupError
-      ) {
-        console.error(
-          "Temporary registration cleanup error:",
-          cleanupError
-        );
-      }
-
-      // ==================================================
-      // LOGIN USER
-      // ==================================================
-
-      req.login(
-        registeredUser,
-        async (loginError) => {
-          if (loginError) {
-            console.error(
-              "Auto login error:",
-              loginError
-            );
-
-            return res.status(500).json({
-              success: false,
-              message:
-                "Account created but automatic login failed.",
-            });
-          }
-
-          try {
-            await saveSession(req);
-
-            return res.status(200).json({
-              success: true,
-
-              message:
-                "Account created and mobile verified successfully.",
-
-              user:
-                getUserData(
-                  registeredUser
-                ),
-            });
-          } catch (
-            sessionError
-          ) {
-            console.error(
-              "Login session save error:",
-              sessionError
-            );
-
-            return res.status(500).json({
-              success: false,
-
-              message:
-                "Account created but session could not be saved.",
-            });
-          }
-        }
-      );
-    } catch (error) {
-      console.error(
-        "OTP verification error:",
-        error
-      );
-
-      if (
-        error &&
-        error.code === 11000
-      ) {
-        return res.status(409).json({
-          success: false,
-          message:
-            "Username, email, mobile, or game UID already exists.",
-        });
-      }
-
-      return res.status(500).json({
-        success: false,
-        message:
-          "OTP verification failed. Please try again.",
-      });
-    }
-  }
-);
-
-// ======================================================
-// LOGIN
-// POST /api/auth/login
-// ======================================================
-
-router.post(
-  "/login",
-  (req, res, next) => {
-    passport.authenticate(
-      "local",
-      (err, user, info) => {
-        if (err) {
-          return next(err);
-        }
-
-        if (!user) {
-          return res.status(401).json({
-            success: false,
-            message:
-              info?.message ||
-              "Invalid username or password.",
-          });
-        }
-
-        req.logIn(
-          user,
-          (loginError) => {
-            if (loginError) {
-              return next(
-                loginError
-              );
-            }
-
-            req.session.save(
-              (sessionError) => {
-                if (sessionError) {
-                  return next(
-                    sessionError
-                  );
-                }
-
-                return res.status(200).json({
-                  success: true,
-
-                  message:
-                    "Login successful",
-
-                  user:
-                    getUserData(
-                      user
-                    ),
-                });
-              }
-            );
-          }
-        );
-      }
-    )(req, res, next);
-  }
-);
-
-// ======================================================
-// CURRENT USER
-// GET /api/auth/me
-// ======================================================
-
-router.get(
-  "/me",
-  (req, res) => {
-    if (
-      !req.isAuthenticated ||
-      !req.isAuthenticated()
-    ) {
-      return res.status(401).json({
-        success: false,
-        authenticated: false,
-        message:
-          "Not authenticated.",
-        user: null,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      authenticated: true,
-      user:
-        getUserData(req.user),
-    });
-  }
-);
-
-// ======================================================
-// CURRENT USER COMPATIBILITY
-// GET /api/auth/current-user
-// ======================================================
-
-router.get(
-  "/current-user",
-  (req, res) => {
-    if (
-      !req.isAuthenticated ||
-      !req.isAuthenticated()
-    ) {
-      return res.status(401).json({
-        success: false,
-        authenticated: false,
-        user: null,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      authenticated: true,
-      user:
-        getUserData(req.user),
-    });
-  }
-);
-
-// ======================================================
-// PROFILE
-// GET /api/auth/profile
-// ======================================================
-
-router.get(
-  "/profile",
-  (req, res) => {
-    if (
-      !req.isAuthenticated ||
-      !req.isAuthenticated()
-    ) {
-      return res.status(401).json({
-        success: false,
-        message:
-          "You must be logged in.",
-        user: null,
-      });
-    }
-
-    return res.status(200).json({
-      success: true,
-      user:
-        getUserData(req.user),
-    });
-  }
-);
-
-// ======================================================
-// UPDATE PROFILE
-// PATCH /api/auth/profile
-// ======================================================
-
-router.patch(
-  "/profile",
-  async (req, res, next) => {
-    try {
-      if (
-        !req.isAuthenticated ||
-        !req.isAuthenticated()
-      ) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "You must be logged in.",
-        });
-      }
-
-      const user = req.user;
-
-      const {
-        fullName,
-        username,
-        email,
-        mobile,
-        upiId,
-      } = req.body;
-
-      // ==================================================
-      // FULL NAME
-      // ==================================================
-
-      if (
-        fullName !== undefined
-      ) {
-        const cleanFullName =
-          String(fullName).trim();
-
-        if (
-          cleanFullName.length < 3
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Full name must contain at least 3 characters.",
-          });
-        }
-
-        user.fullName =
-          cleanFullName;
-      }
-
-      // ==================================================
-      // USERNAME
-      // ==================================================
-
-      if (
-        username !== undefined
-      ) {
-        const cleanUsername =
-          String(username)
-            .trim()
-            .toLowerCase();
-
-        if (
-          cleanUsername.length < 3
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Username must contain at least 3 characters.",
-          });
-        }
-
-        const existingUsername =
-          await User.findOne({
-            username:
-              cleanUsername,
-
-            _id: {
-              $ne: user._id,
-            },
-          });
-
-        if (existingUsername) {
-          return res.status(409).json({
-            success: false,
-            message:
-              "Username already exists.",
-          });
-        }
-
-        user.username =
-          cleanUsername;
-      }
-
-      // ==================================================
-      // EMAIL
-      // ==================================================
-
-      if (
-        email !== undefined
-      ) {
-        const cleanEmail =
-          String(email)
-            .trim()
-            .toLowerCase();
-
-        if (
-          !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-            cleanEmail
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Please enter a valid email address.",
-          });
-        }
-
-        const existingEmail =
-          await User.findOne({
-            email:
-              cleanEmail,
-
-            _id: {
-              $ne: user._id,
-            },
-          });
-
-        if (existingEmail) {
-          return res.status(409).json({
-            success: false,
-            message:
-              "Email already exists.",
-          });
-        }
-
-        user.email =
-          cleanEmail;
-      }
-
-      // ==================================================
-      // MOBILE
-      // ==================================================
-
-      if (
-        mobile !== undefined
-      ) {
-        const cleanMobile =
-          String(mobile).trim();
-
-        if (
-          !/^[6-9][0-9]{9}$/.test(
-            cleanMobile
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Invalid mobile number.",
-          });
-        }
-
-        const existingMobile =
-          await User.findOne({
-            mobile:
-              cleanMobile,
-
-            _id: {
-              $ne: user._id,
-            },
-          });
-
-        if (existingMobile) {
-          return res.status(409).json({
-            success: false,
-            message:
-              "Mobile number already exists.",
-          });
-        }
-
-        user.mobile =
-          cleanMobile;
-      }
-
-      // ==================================================
-      // UPI ID
-      // ==================================================
-
-      if (
-        upiId !== undefined
-      ) {
-        const cleanUpiId =
-          String(upiId)
-            .trim()
-            .toLowerCase();
-
-        if (
-          cleanUpiId &&
-          !/^[\w.-]+@[\w.-]+$/.test(
-            cleanUpiId
-          )
-        ) {
-          return res.status(400).json({
-            success: false,
-            message:
-              "Please enter a valid UPI ID.",
-          });
-        }
-
-        user.upiId =
-          cleanUpiId;
-      }
-
-      await user.save();
-
-      return res.status(200).json({
-        success: true,
-
-        message:
-          "Profile updated successfully.",
-
-        user:
-          getUserData(user),
-      });
-    } catch (error) {
-      console.error(
-        "Profile update error:",
-        error
-      );
-
-      return next(error);
-    }
-  }
-);
-
-// ======================================================
-// UPDATE GAME UID
-// PATCH /api/auth/game-uid
-// ======================================================
-
-router.patch(
-  "/game-uid",
-  async (req, res, next) => {
-    try {
-      if (
-        !req.isAuthenticated ||
-        !req.isAuthenticated()
-      ) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "You must be logged in.",
-        });
-      }
-
-      const {
-        game,
-        gameUid,
-      } = req.body;
-
-      if (!game) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Game is required.",
-        });
-      }
-
-      if (
-        !["BGMI", "Free Fire"].includes(
-          game
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Game must be BGMI or Free Fire.",
-        });
-      }
-
-      if (
-        gameUid === undefined ||
-        gameUid === null
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            `${game} UID is required.`,
-        });
-      }
-
-      const cleanUid =
-        String(gameUid).trim();
-
-      if (!cleanUid) {
-        return res.status(400).json({
-          success: false,
-          message:
-            `${game} UID cannot be empty.`,
-        });
-      }
-
-      const user = req.user;
-
-      const uidQuery =
-        game === "BGMI"
-          ? {
-              bgmiUid:
-                cleanUid,
-            }
-          : {
-              freeFireUid:
-                cleanUid,
-            };
-
-      const existingUser =
-        await User.findOne({
-          ...uidQuery,
-
-          _id: {
-            $ne: user._id,
+          headers: {
+            Accept: "application/json",
           },
+
+          cache: "no-store",
         });
 
-      if (existingUser) {
-        return res.status(409).json({
-          success: false,
-          message:
-            `${game} UID is already registered to another user.`,
+        const meText = await meResponse.text();
+
+        let meData: MeResponse = {};
+
+        try {
+          meData = JSON.parse(meText);
+        } catch {
+          console.warn(
+            "ME API RETURNED NON-JSON:",
+            meText
+          );
+        }
+
+        console.log("ME RESPONSE:", {
+          status: meResponse.status,
+          data: meData,
         });
+
+        if (meResponse.ok && meData.user) {
+          console.log(
+            "SESSION VERIFIED:",
+            meData.user
+          );
+        } else {
+          console.warn(
+            "Login succeeded but /me could not immediately verify the session."
+          );
+        }
+      } catch (meError) {
+        console.warn(
+          "Session verification request failed:",
+          meError
+        );
       }
 
-      if (game === "BGMI") {
-        user.bgmiUid =
-          cleanUid;
-      }
+      // ==================================================
+      // REDIRECT
+      // ==================================================
 
-      if (
-        game === "Free Fire"
-      ) {
-        user.freeFireUid =
-          cleanUid;
-      }
+      const destination = getDestination();
 
-      if (user.game === game) {
-        user.gameUid =
-          cleanUid;
-      }
+      console.log(
+        "REDIRECTING TO:",
+        destination
+      );
 
-      await user.save();
-
-      return res.status(200).json({
-        success: true,
-
-        message:
-          `${game} UID updated successfully.`,
-
-        user:
-          getUserData(user),
-      });
+      setTimeout(() => {
+        router.replace(destination);
+        router.refresh();
+      }, 300);
     } catch (error) {
-      console.error(
-        "Game UID update error:",
-        error
-      );
+      console.error("LOGIN ERROR:", error);
 
-      return next(error);
+      setError(
+        "Cannot connect to server. Please make sure the backend is running."
+      );
+    } finally {
+      setLoading(false);
     }
-  }
-);
+  };
+
+  // ======================================================
+  // UI
+  // ======================================================
+
+  return (
+    <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
+
+      {/* HEADER */}
+
+      <header className="border-b border-[#e6e9f0] bg-white">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+
+          <Link
+            href="/"
+            className="flex items-center gap-3"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#4f46e5] text-lg shadow-sm">
+              🎮
+            </div>
+
+            <div>
+              <p className="text-[15px] font-extrabold tracking-tight text-[#172033]">
+                Tournament Arena
+              </p>
+
+              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
+                Competitive Gaming
+              </p>
+            </div>
+          </Link>
+
+          <Link
+            href="/register"
+            className="rounded-lg border border-[#dce1ea] px-3.5 py-2 text-xs font-semibold text-[#4b5568] transition hover:border-[#6366f1] hover:text-[#4f46e5]"
+          >
+            Create account
+          </Link>
+
+        </div>
+      </header>
+
+      {/* MAIN */}
+
+      <div className="mx-auto flex min-h-[calc(100vh-72px)] max-w-7xl items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
+
+        <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[#e2e6ee] bg-white shadow-[0_12px_40px_rgba(25,35,55,0.07)] lg:grid-cols-[0.8fr_1.2fr]">
+
+          {/* LEFT PANEL */}
+
+          <section className="hidden bg-[#20264a] p-8 text-white lg:flex xl:p-10">
+
+            <div className="flex w-full flex-col">
+
+              <div>
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6366f1] text-lg">
+                    🎮
+                  </div>
+
+                  <div>
+                    <p className="text-sm font-extrabold">
+                      Tournament Arena
+                    </p>
+
+                    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#a5b4fc]">
+                      Player platform
+                    </p>
+                  </div>
+
+                </div>
+              </div>
+
+              <div className="mt-20">
+
+                <div className="mb-4 flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#818cf8]" />
+
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a5b4fc]">
+                    Welcome back
+                  </span>
+                </div>
+
+                <h1 className="text-4xl font-extrabold leading-tight xl:text-5xl">
+                  Ready to
+                  <span className="block text-[#818cf8]">
+                    compete?
+                  </span>
+                </h1>
+
+                <p className="mt-5 max-w-[330px] text-sm leading-6 text-[#b9c0d4]">
+                  Sign in to manage your profile,
+                  join tournaments and continue
+                  your competitive journey.
+                </p>
+
+              </div>
+
+              <div className="mt-auto space-y-3">
+
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+                    🏆
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold">
+                      Join tournaments
+                    </p>
+
+                    <p className="text-[10px] text-[#9fa8bf]">
+                      Find your next challenge
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+                    👤
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold">
+                      Manage your profile
+                    </p>
+
+                    <p className="text-[10px] text-[#9fa8bf]">
+                      Keep your player details updated
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
+                    ⚡
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-semibold">
+                      Play & compete
+                    </p>
+
+                    <p className="text-[10px] text-[#9fa8bf]">
+                      Get into the action quickly
+                    </p>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </section>
+
+          {/* LOGIN FORM */}
+
+          <section className="flex items-center bg-white">
+
+            <div className="w-full p-6 sm:p-9 lg:p-10 xl:p-12">
+
+              <div className="mx-auto w-full max-w-[400px]">
+
+                {/* MOBILE HEADING */}
+
+                <div className="mb-8 lg:hidden">
+
+                  <div className="mb-2 flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#6366f1]" />
+
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
+                      Account access
+                    </span>
+                  </div>
+
+                  <h1 className="text-2xl font-extrabold text-[#172033]">
+                    Welcome back
+                  </h1>
+
+                  <p className="mt-2 text-sm text-[#7a8498]">
+                    Sign in to continue to your account.
+                  </p>
+
+                </div>
+
+                {/* DESKTOP HEADING */}
+
+                <div className="hidden lg:block">
+
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-[#6366f1]" />
+
+                    <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#6366f1]">
+                      Account access
+                    </span>
+                  </div>
+
+                  <h2 className="text-3xl font-extrabold tracking-tight text-[#172033]">
+                    Welcome back
+                  </h2>
+
+                  <p className="mt-2 text-sm leading-6 text-[#7a8498]">
+                    Sign in to continue to your
+                    Tournament Arena account.
+                  </p>
+
+                </div>
+
+                {/* FORM */}
+
+                <form
+                  onSubmit={handleSubmit}
+                  className="mt-8 space-y-5"
+                >
+
+                  {/* USERNAME */}
+
+                  <div>
+
+                    <label
+                      htmlFor="username"
+                      className="mb-1.5 block text-xs font-semibold text-[#465168]"
+                    >
+                      Username
+                    </label>
+
+                    <div className="relative">
+
+                      <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa2b2]">
+
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <circle
+                            cx="12"
+                            cy="8"
+                            r="3.5"
+                          />
+
+                          <path
+                            d="M5 20c.8-3.6 3.1-5.5 7-5.5s6.2 1.9 7 5.5"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+
+                      </div>
+
+                      <input
+                        id="username"
+                        name="username"
+                        type="text"
+                        value={formData.username}
+                        onChange={handleChange}
+                        placeholder="Enter your username"
+                        autoComplete="username"
+                        autoFocus
+                        disabled={loading}
+                        className="h-12 w-full rounded-lg border border-[#dce1ea] bg-[#fafbfc] pl-11 pr-4 text-sm text-[#172033] outline-none transition placeholder:text-[#a3aaba] hover:border-[#c8cedb] focus:border-[#6366f1] focus:bg-white focus:ring-4 focus:ring-[#6366f1]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+
+                    </div>
+                  </div>
+
+                  {/* PASSWORD */}
+
+                  <div>
+
+                    <div className="mb-1.5 flex items-center justify-between">
+
+                      <label
+                        htmlFor="password"
+                        className="text-xs font-semibold text-[#465168]"
+                      >
+                        Password
+                      </label>
+
+                      <Link
+                        href="/forgot-password"
+                        className="text-[11px] font-semibold text-[#7c8699] transition hover:text-[#4f46e5]"
+                      >
+                        Forgot password?
+                      </Link>
+
+                    </div>
+
+                    <div className="relative">
+
+                      <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa2b2]">
+
+                        <svg
+                          width="17"
+                          height="17"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                        >
+                          <rect
+                            x="5"
+                            y="10"
+                            width="14"
+                            height="10"
+                            rx="2"
+                          />
+
+                          <path
+                            d="M8 10V7a4 4 0 0 1 8 0v3"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+
+                      </div>
+
+                      <input
+                        id="password"
+                        name="password"
+                        type={
+                          showPassword
+                            ? "text"
+                            : "password"
+                        }
+                        value={formData.password}
+                        onChange={handleChange}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        disabled={loading}
+                        className="h-12 w-full rounded-lg border border-[#dce1ea] bg-[#fafbfc] pl-11 pr-16 text-sm text-[#172033] outline-none transition placeholder:text-[#a3aaba] hover:border-[#c8cedb] focus:border-[#6366f1] focus:bg-white focus:ring-4 focus:ring-[#6366f1]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setShowPassword(
+                            (previous) => !previous
+                          )
+                        }
+                        disabled={loading}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[#8d96a7] transition hover:bg-[#eef0f5] hover:text-[#4f46e5] disabled:opacity-50"
+                      >
+                        {showPassword
+                          ? "Hide"
+                          : "Show"}
+                      </button>
+
+                    </div>
+                  </div>
+
+                  {/* REMEMBER ME */}
+
+                  <label
+                    htmlFor="rememberMe"
+                    className="flex cursor-pointer items-center gap-2.5 text-xs text-[#7d8799]"
+                  >
+                    <input
+                      id="rememberMe"
+                      name="rememberMe"
+                      type="checkbox"
+                      checked={formData.rememberMe}
+                      onChange={handleChange}
+                      disabled={loading}
+                      className="h-4 w-4 rounded border-[#d5dae3] accent-[#4f46e5]"
+                    />
+
+                    Remember me
+                  </label>
+
+                  {/* ERROR */}
+
+                  {error && (
+                    <div
+                      role="alert"
+                      className="flex items-start gap-3 rounded-lg border border-[#fecaca] bg-[#fff5f5] px-3.5 py-3"
+                    >
+
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fee2e2] text-xs font-bold text-[#dc2626]">
+                        !
+                      </div>
+
+                      <p className="text-xs leading-5 text-[#dc2626]">
+                        {error}
+                      </p>
+
+                    </div>
+                  )}
+
+                  {/* SUCCESS */}
+
+                  {success && (
+                    <div
+                      role="status"
+                      className="flex items-start gap-3 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3.5 py-3"
+                    >
+
+                      <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#dcfce7] text-xs font-bold text-[#16a34a]">
+                        ✓
+                      </div>
+
+                      <p className="text-xs leading-5 text-[#15803d]">
+                        {success}
+                      </p>
+
+                    </div>
+                  )}
+
+                  {/* SUBMIT */}
+
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="group flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#4f46e5] px-5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(79,70,229,0.20)] transition hover:bg-[#4338ca] hover:shadow-[0_8px_22px_rgba(79,70,229,0.26)] focus:outline-none focus:ring-4 focus:ring-[#6366f1]/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+
+                    {loading ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        Sign in
+
+                        <svg
+                          width="16"
+                          height="16"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          className="transition-transform group-hover:translate-x-0.5"
+                        >
+                          <path d="M5 12h14" />
+                          <path d="m13 6 6 6-6 6" />
+                        </svg>
+                      </>
+                    )}
+
+                  </button>
+
+                </form>
+
+                {/* BOTTOM */}
+
+                <div className="mt-7 border-t border-[#edf0f4] pt-5 text-center">
+
+                  <p className="text-xs text-[#929bad]">
+                    New to Tournament Arena?
+
+                    <Link
+                      href="/register"
+                      className="ml-1.5 font-bold text-[#4f46e5] transition hover:text-[#4338ca]"
+                    >
+                      Create an account
+                    </Link>
+                  </p>
+
+                </div>
+
+                <div className="mt-5 flex items-center justify-between">
+
+                  <Link
+                    href="/"
+                    className="text-[11px] font-medium text-[#9aa2b2] transition hover:text-[#4f46e5]"
+                  >
+                    ← Back to home
+                  </Link>
+
+                  <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#b0b6c2]">
+
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
+                    Secure access
+
+                  </span>
+
+                </div>
+
+              </div>
+            </div>
+
+          </section>
+
+        </div>
+      </div>
+
+    </main>
+  );
+}
 
 // ======================================================
-// FORGOT PASSWORD - SEND OTP
-// POST /api/auth/forgot-password/send-otp
+// PAGE WRAPPER
 // ======================================================
 
-router.post(
-  "/forgot-password/send-otp",
-  async (req, res) => {
-    try {
-      const { mobile } =
-        req.body;
-
-      // ==================================================
-      // VALIDATE MOBILE
-      // ==================================================
-
-      if (
-        !mobile ||
-        !/^[6-9][0-9]{9}$/.test(
-          String(mobile).trim()
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid 10-digit mobile number.",
-        });
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-[#f5f7fb]">
+          <div className="text-sm font-semibold text-[#4f46e5]">
+            Loading...
+          </div>
+        </main>
       }
-
-      const cleanMobile =
-        String(mobile).trim();
-
-      // ==================================================
-      // FIND USER
-      // ==================================================
-
-      const user =
-        await User.findOne({
-          mobile:
-            cleanMobile,
-        });
-
-      if (!user) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "No account found with this mobile number.",
-        });
-      }
-
-      // ==================================================
-      // HANUOTP API KEY
-      // ==================================================
-
-      const hanuOtpApiKey =
-        process.env.HANUOTP_API_KEY;
-
-      if (!hanuOtpApiKey) {
-        console.error(
-          "HANUOTP_API_KEY is missing."
-        );
-
-        return res.status(500).json({
-          success: false,
-          message:
-            "OTP service is not configured.",
-        });
-      }
-
-      // ==================================================
-      // GENERATE OTP
-      // ==================================================
-
-      const otp =
-        generateOtp();
-
-      // ==================================================
-      // GENERATE RESET TOKEN
-      // ==================================================
-
-      const resetToken =
-        generateResetToken();
-
-      const otpExpiresAt =
-        Date.now() +
-        10 * 60 * 1000;
-
-      // ==================================================
-      // CREATE RESET SESSION
-      // ==================================================
-
-      const resetSession = {
-        cookie: {
-          originalMaxAge:
-            10 * 60 * 1000,
-
-          maxAge:
-            10 * 60 * 1000,
-
-          expires:
-            new Date(
-              Date.now() +
-                10 * 60 * 1000
-            ),
-
-          httpOnly: true,
-
-          path: "/",
-        },
-
-        forgotPassword: {
-          userId:
-            user._id.toString(),
-
-          mobile:
-            cleanMobile,
-
-          otp,
-
-          otpExpiresAt,
-
-          otpAttempts: 0,
-
-          verified: false,
-
-          verifiedAt: null,
-
-          resetToken,
-        },
-      };
-
-      // ==================================================
-      // CHECK SESSION STORE
-      // ==================================================
-
-      if (
-        !req.sessionStore ||
-        typeof req.sessionStore.set !==
-          "function"
-      ) {
-        console.error(
-          "Session store is not available."
-        );
-
-        return res.status(500).json({
-          success: false,
-          message:
-            "Password reset service is not configured correctly.",
-        });
-      }
-
-      // ==================================================
-      // SAVE RESET TOKEN SESSION
-      // ==================================================
-
-      await new Promise(
-        (resolve, reject) => {
-          req.sessionStore.set(
-            resetToken,
-            resetSession,
-            (error) => {
-              if (error) {
-                return reject(error);
-              }
-
-              resolve();
-            }
-          );
-        }
-      );
-
-      console.log("");
-      console.log(
-        "======================================"
-      );
-      console.log(
-        "FORGOT PASSWORD OTP"
-      );
-      console.log(
-        "======================================"
-      );
-
-      console.log(
-        "Mobile:",
-        cleanMobile
-      );
-
-      console.log(
-        "Reset Token:",
-        resetToken
-      );
-
-      console.log(
-        "OTP:",
-        otp
-      );
-
-      console.log(
-        "OTP expires:",
-        new Date(
-          otpExpiresAt
-        ).toISOString()
-      );
-
-      console.log(
-        "======================================"
-      );
-
-      // ==================================================
-      // SEND OTP
-      // ==================================================
-
-      try {
-        const response =
-          await axios.get(
-            "https://api.hanuotp.in/sms-otp.php",
-            {
-              params: {
-                number:
-                  cleanMobile,
-
-                OTP:
-                  otp,
-
-                apikey:
-                  hanuOtpApiKey,
-
-                templatesid:
-                  "default",
-              },
-
-              timeout: 15000,
-            }
-          );
-
-        console.log(
-          "Forgot password HanuOTP:",
-          response.data
-        );
-
-        // ==================================================
-        // OTP SENT
-        // ==================================================
-
-        if (
-          response.data &&
-          response.data.status ===
-            "success"
-        ) {
-          return res.status(200).json({
-            success: true,
-
-            message:
-              "OTP sent successfully.",
-
-            resetToken,
-
-            mobile:
-              cleanMobile,
-          });
-        }
-
-        // ==================================================
-        // HANUOTP FAILED
-        // ==================================================
-
-        console.error(
-          "HanuOTP rejected:",
-          response.data
-        );
-
-        await new Promise(
-          (resolve) => {
-            req.sessionStore.destroy(
-              resetToken,
-              () => resolve()
-            );
-          }
-        );
-
-        return res.status(400).json({
-          success: false,
-
-          message:
-            response.data?.message ||
-            "Unable to send OTP. Please try again.",
-        });
-      } catch (otpError) {
-        console.error(
-          "Forgot password OTP error:",
-          otpError.response
-            ?.data ||
-            otpError.message
-        );
-
-        await new Promise(
-          (resolve) => {
-            req.sessionStore.destroy(
-              resetToken,
-              () => resolve()
-            );
-          }
-        );
-
-        return res.status(502).json({
-          success: false,
-
-          message:
-            "Unable to send OTP. Please try again.",
-        });
-      }
-    } catch (error) {
-      console.error(
-        "Forgot password send OTP error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-
-        message:
-          "Unable to send OTP.",
-      });
-    }
-  }
-);
-
-// ======================================================
-// FORGOT PASSWORD - VERIFY OTP
-// POST /api/auth/forgot-password/verify-otp
-// ======================================================
-
-router.post(
-  "/forgot-password/verify-otp",
-  async (req, res) => {
-    try {
-      const mobileOtp =
-        req.body.otp ||
-        req.body.mobileOtp;
-
-      const resetToken =
-        getResetTokenFromRequest(
-          req
-        );
-
-      console.log("");
-      console.log(
-        "======================================"
-      );
-      console.log(
-        "FORGOT PASSWORD OTP VERIFICATION"
-      );
-      console.log(
-        "======================================"
-      );
-
-      console.log(
-        "Reset Token received:",
-        resetToken
-          ? "YES"
-          : "NO"
-      );
-
-      console.log(
-        "OTP received:",
-        mobileOtp
-          ? "YES"
-          : "NO"
-      );
-
-      // ==================================================
-      // OTP VALIDATION
-      // ==================================================
-
-      if (!mobileOtp) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP is required.",
-        });
-      }
-
-      const cleanOtp =
-        String(mobileOtp).trim();
-
-      if (!/^\d{6}$/.test(cleanOtp)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please enter a valid 6-digit OTP.",
-        });
-      }
-
-      // ==================================================
-      // RESET TOKEN VALIDATION
-      // ==================================================
-
-      if (
-        !resetToken ||
-        !/^[a-f0-9]{64}$/i.test(
-          resetToken
-        )
-      ) {
-        console.error(
-          "Reset token missing or invalid."
-        );
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password reset token is required. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // GET TOKEN SESSION
-      // ==================================================
-
-      const resetSession =
-        await getResetSession(
-          req,
-          resetToken
-        );
-
-      console.log(
-        "Reset Session Exists:",
-        !!resetSession
-      );
-
-      if (!resetSession) {
-        console.error(
-          "Forgot password token session NOT FOUND."
-        );
-
-        return res.status(404).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      const resetData =
-        resetSession.session
-          .forgotPassword;
-
-      if (!resetData) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // CHECK TOKEN MATCH
-      // ==================================================
-
-      if (
-        !resetData.resetToken ||
-        resetData.resetToken !==
-          resetToken
-      ) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Invalid password reset token. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // CHECK EXPIRY
-      // ==================================================
-
-      if (
-        !resetData.otpExpiresAt ||
-        resetData.otpExpiresAt <
-          Date.now()
-      ) {
-        console.error(
-          "Forgot password OTP expired."
-        );
-
-        try {
-          await destroyResetSession(
-            req,
-            resetSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "Reset session destroy error:",
-            destroyError
-          );
-        }
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "OTP has expired. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // CHECK ATTEMPTS
-      // ==================================================
-
-      const otpAttempts =
-        Number(
-          resetData.otpAttempts ||
-            0
-        );
-
-      if (otpAttempts >= 5) {
-        try {
-          await destroyResetSession(
-            req,
-            resetSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "Reset session destroy error:",
-            destroyError
-          );
-        }
-
-        return res.status(429).json({
-          success: false,
-          message:
-            "Maximum OTP attempts exceeded. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // CHECK OTP
-      // ==================================================
-
-      if (
-        String(resetData.otp) !==
-        cleanOtp
-      ) {
-        resetData.otpAttempts =
-          otpAttempts + 1;
-
-        resetSession.session
-          .forgotPassword =
-          resetData;
-
-        await saveResetSession(
-          req,
-          resetSession
-        );
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "Invalid OTP.",
-        });
-      }
-
-      // ==================================================
-      // OTP VERIFIED
-      // ==================================================
-
-      resetData.verified =
-        true;
-
-      resetData.verifiedAt =
-        Date.now();
-
-      // Remove OTP after verification.
-      resetData.otp = null;
-
-      resetSession.session
-        .forgotPassword =
-        resetData;
-
-      // ==================================================
-      // SAVE VERIFIED SESSION
-      // ==================================================
-
-      await saveResetSession(
-        req,
-        resetSession
-      );
-
-      console.log(
-        "OTP VERIFIED SUCCESSFULLY"
-      );
-
-      console.log(
-        "Reset Token:",
-        resetToken
-      );
-
-      console.log(
-        "======================================"
-      );
-
-      // ==================================================
-      // RETURN TOKEN
-      // ==================================================
-
-      return res.status(200).json({
-        success: true,
-
-        message:
-          "OTP verified successfully.",
-
-        resetToken,
-      });
-    } catch (error) {
-      console.error(
-        "Forgot password verify OTP error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-
-        message:
-          "OTP verification failed.",
-      });
-    }
-  }
-);
-
-// ======================================================
-// FORGOT PASSWORD - RESET PASSWORD
-// POST /api/auth/forgot-password/reset
-// ======================================================
-
-router.post(
-  "/forgot-password/reset",
-  async (req, res) => {
-    try {
-      const password =
-        req.body.newPassword ||
-        req.body.password;
-
-      const resetToken =
-        getResetTokenFromRequest(
-          req
-        );
-
-      console.log("");
-      console.log(
-        "======================================"
-      );
-      console.log(
-        "FORGOT PASSWORD RESET REQUEST"
-      );
-      console.log(
-        "======================================"
-      );
-
-      console.log(
-        "Reset Token received:",
-        resetToken
-          ? "YES"
-          : "NO"
-      );
-
-      // ==================================================
-      // PASSWORD VALIDATION
-      // ==================================================
-
-      if (
-        !password ||
-        String(password).length < 6
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password must be at least 6 characters.",
-        });
-      }
-
-      // ==================================================
-      // TOKEN VALIDATION
-      // ==================================================
-
-      if (
-        !resetToken ||
-        !/^[a-f0-9]{64}$/i.test(
-          resetToken
-        )
-      ) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Password reset token is required. Please verify OTP first.",
-        });
-      }
-
-      // ==================================================
-      // GET RESET SESSION
-      // ==================================================
-
-      const resetSession =
-        await getResetSession(
-          req,
-          resetToken
-        );
-
-      if (!resetSession) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      const resetData =
-        resetSession.session
-          .forgotPassword;
-
-      if (!resetData) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // VERIFY TOKEN
-      // ==================================================
-
-      if (
-        !resetData.resetToken ||
-        resetData.resetToken !==
-          resetToken
-      ) {
-        return res.status(401).json({
-          success: false,
-          message:
-            "Invalid password reset token. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // OTP MUST BE VERIFIED
-      // ==================================================
-
-      if (!resetData.verified) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Please verify OTP first.",
-        });
-      }
-
-      // ==================================================
-      // CHECK RESET SESSION EXPIRY
-      // ==================================================
-
-      if (
-        !resetData.otpExpiresAt ||
-        resetData.otpExpiresAt <
-          Date.now()
-      ) {
-        try {
-          await destroyResetSession(
-            req,
-            resetSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "Reset session destroy error:",
-            destroyError
-          );
-        }
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // VERIFIED SESSION AGE LIMIT
-      // ==================================================
-
-      if (
-        resetData.verifiedAt &&
-        Date.now() -
-          Number(
-            resetData.verifiedAt
-          ) >
-          10 * 60 * 1000
-      ) {
-        try {
-          await destroyResetSession(
-            req,
-            resetSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "Reset session destroy error:",
-            destroyError
-          );
-        }
-
-        return res.status(400).json({
-          success: false,
-          message:
-            "Password reset session expired. Please request a new OTP.",
-        });
-      }
-
-      // ==================================================
-      // FIND USER
-      // ==================================================
-
-      const user =
-        await User.findById(
-          resetData.userId
-        );
-
-      if (!user) {
-        try {
-          await destroyResetSession(
-            req,
-            resetSession
-          );
-        } catch (
-          destroyError
-        ) {
-          console.error(
-            "Reset session destroy error:",
-            destroyError
-          );
-        }
-
-        return res.status(404).json({
-          success: false,
-          message:
-            "User not found.",
-        });
-      }
-
-      // ==================================================
-      // SET NEW PASSWORD
-      // ==================================================
-
-      await user.setPassword(
-        String(password)
-      );
-
-      await user.save();
-
-      // ==================================================
-      // DESTROY RESET TOKEN
-      // ==================================================
-
-      try {
-        await destroyResetSession(
-          req,
-          resetSession
-        );
-      } catch (
-        destroyError
-      ) {
-        console.error(
-          "Reset token cleanup error:",
-          destroyError
-        );
-      }
-
-      console.log(
-        "PASSWORD RESET SUCCESSFULLY"
-      );
-
-      console.log(
-        "User:",
-        user.username
-      );
-
-      console.log(
-        "======================================"
-      );
-
-      return res.status(200).json({
-        success: true,
-
-        message:
-          "Password reset successfully.",
-      });
-    } catch (error) {
-      console.error(
-        "Forgot password reset error:",
-        error
-      );
-
-      return res.status(500).json({
-        success: false,
-
-        message:
-          "Unable to reset password.",
-      });
-    }
-  }
-);
-
-// ======================================================
-// LOGOUT
-// POST /api/auth/logout
-// ======================================================
-
-router.post(
-  "/logout",
-  (req, res, next) => {
-    req.logout(
-      (logoutError) => {
-        if (logoutError) {
-          return next(
-            logoutError
-          );
-        }
-
-        if (!req.session) {
-          return res.status(200).json({
-            success: true,
-
-            message:
-              "Logged out successfully.",
-          });
-        }
-
-        req.session.destroy(
-          (sessionError) => {
-            if (sessionError) {
-              console.error(
-                "Session destroy error:",
-                sessionError
-              );
-
-              return next(
-                sessionError
-              );
-            }
-
-            res.clearCookie(
-              "connect.sid"
-            );
-
-            return res.status(200).json({
-              success: true,
-
-              message:
-                "Logged out successfully.",
-            });
-          }
-        );
-      }
-    );
-  }
-);
-
-// ======================================================
-// EXPORT
-// ======================================================
-
-module.exports = router;
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}

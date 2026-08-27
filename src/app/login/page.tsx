@@ -30,10 +30,12 @@ type LoggedInUser = {
   gameUid?: string;
   bgmiUid?: string;
   freeFireUid?: string;
+  upiId?: string;
 };
 
 type LoginResponse = {
   success?: boolean;
+  authenticated?: boolean;
   message?: string;
   token?: string;
   accessToken?: string;
@@ -42,8 +44,9 @@ type LoginResponse = {
 
 type MeResponse = {
   success?: boolean;
+  authenticated?: boolean;
   message?: string;
-  user?: LoggedInUser;
+  user?: LoggedInUser | null;
 };
 
 // ======================================================
@@ -140,16 +143,22 @@ function LoginForm() {
       console.log("LOGIN REQUEST");
       console.log("API URL:", loginUrl);
       console.log("USERNAME:", username);
+      console.log("REMEMBER ME:", formData.rememberMe);
       console.log("========================================");
 
       const response = await fetch(loginUrl, {
         method: "POST",
+
+        // VERY IMPORTANT FOR SESSION COOKIE
         credentials: "include",
+
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
+
         cache: "no-store",
+
         body: JSON.stringify({
           username,
           password,
@@ -175,6 +184,10 @@ function LoginForm() {
         data,
       });
 
+      // ==================================================
+      // LOGIN FAILED
+      // ==================================================
+
       if (!response.ok || data.success === false) {
         setError(
           data.message || "Invalid username or password."
@@ -183,75 +196,104 @@ function LoginForm() {
       }
 
       // ==================================================
-      // VERIFY SESSION
-      // ==================================================
-
-      const meUrl = `${API_URL}/api/auth/me`;
-
-      console.log("VERIFYING SESSION:", meUrl);
-
-      const meResponse = await fetch(meUrl, {
-        method: "GET",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-        },
-        cache: "no-store",
-      });
-
-      const meText = await meResponse.text();
-
-      let meData: MeResponse = {};
-
-      try {
-        meData = JSON.parse(meText);
-      } catch {
-        console.error(
-          "AUTH ME API RETURNED NON-JSON:",
-          meText
-        );
-      }
-
-      console.log("AUTH ME RESPONSE:", {
-        status: meResponse.status,
-        data: meData,
-      });
-
-      if (!meResponse.ok || !meData.user) {
-        setError(
-          meData.message ||
-            "Login succeeded, but the session could not be verified. Please try again."
-        );
-        return;
-      }
-
-      // ==================================================
       // LOGIN SUCCESS
       // ==================================================
 
+      if (!data.user) {
+        console.warn(
+          "Login succeeded but no user object was returned."
+        );
+      }
+
       console.log("========================================");
-      console.log("LOGIN + SESSION SUCCESS");
-      console.log("USER:", meData.user);
+      console.log("LOGIN SUCCESS");
+      console.log("USER:", data.user);
       console.log("========================================");
 
       setSuccess(
         `Welcome back${
-          meData.user.username
-            ? `, ${meData.user.username}`
+          data.user?.username
+            ? `, ${data.user.username}`
             : ""
         }!`
       );
 
+      // ==================================================
+      // OPTIONAL SESSION CHECK
+      //
+      // We do NOT make failure of /me block login.
+      // The login endpoint itself is authoritative.
+      // ==================================================
+
+      try {
+        const meUrl = `${API_URL}/api/auth/me`;
+
+        console.log("CHECKING SESSION:", meUrl);
+
+        const meResponse = await fetch(meUrl, {
+          method: "GET",
+
+          credentials: "include",
+
+          headers: {
+            Accept: "application/json",
+          },
+
+          cache: "no-store",
+        });
+
+        const meText = await meResponse.text();
+
+        let meData: MeResponse = {};
+
+        try {
+          meData = JSON.parse(meText);
+        } catch {
+          console.warn(
+            "ME API RETURNED NON-JSON:",
+            meText
+          );
+        }
+
+        console.log("ME RESPONSE:", {
+          status: meResponse.status,
+          data: meData,
+        });
+
+        if (meResponse.ok && meData.user) {
+          console.log(
+            "SESSION VERIFIED:",
+            meData.user
+          );
+        } else {
+          console.warn(
+            "Login succeeded but /me could not immediately verify the session."
+          );
+        }
+      } catch (meError) {
+        console.warn(
+          "Session verification request failed:",
+          meError
+        );
+      }
+
+      // ==================================================
+      // REDIRECT
+      // ==================================================
+
       const destination = getDestination();
 
-      console.log("REDIRECTING TO:", destination);
+      console.log(
+        "REDIRECTING TO:",
+        destination
+      );
 
       setTimeout(() => {
         router.replace(destination);
         router.refresh();
       }, 300);
-    } catch (err) {
-      console.error("LOGIN ERROR:", err);
+    } catch (error) {
+      console.error("LOGIN ERROR:", error);
 
       setError(
         "Cannot connect to server. Please make sure the backend is running."
@@ -267,12 +309,12 @@ function LoginForm() {
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
-      {/* ==================================================
-          HEADER
-      ================================================== */}
+
+      {/* HEADER */}
 
       <header className="border-b border-[#e6e9f0] bg-white">
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5 sm:px-8">
+
           <Link
             href="/"
             className="flex items-center gap-3"
@@ -298,25 +340,25 @@ function LoginForm() {
           >
             Create account
           </Link>
+
         </div>
       </header>
 
-      {/* ==================================================
-          MAIN
-      ================================================== */}
+      {/* MAIN */}
 
       <div className="mx-auto flex min-h-[calc(100vh-72px)] max-w-7xl items-center justify-center px-4 py-8 sm:px-6 sm:py-12">
+
         <div className="grid w-full max-w-5xl overflow-hidden rounded-2xl border border-[#e2e6ee] bg-white shadow-[0_12px_40px_rgba(25,35,55,0.07)] lg:grid-cols-[0.8fr_1.2fr]">
-          {/* ==================================================
-              LEFT INFORMATION PANEL
-          ================================================== */}
+
+          {/* LEFT PANEL */}
 
           <section className="hidden bg-[#20264a] p-8 text-white lg:flex xl:p-10">
+
             <div className="flex w-full flex-col">
-              {/* Brand */}
 
               <div>
                 <div className="flex items-center gap-3">
+
                   <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#6366f1] text-lg">
                     🎮
                   </div>
@@ -330,12 +372,12 @@ function LoginForm() {
                       Player platform
                     </p>
                   </div>
+
                 </div>
               </div>
 
-              {/* Main message */}
-
               <div className="mt-20">
+
                 <div className="mb-4 flex items-center gap-2">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#818cf8]" />
 
@@ -356,11 +398,11 @@ function LoginForm() {
                   join tournaments and continue
                   your competitive journey.
                 </p>
+
               </div>
 
-              {/* Features */}
-
               <div className="mt-auto space-y-3">
+
                 <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3">
                   <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/10">
                     🏆
@@ -408,20 +450,24 @@ function LoginForm() {
                     </p>
                   </div>
                 </div>
+
               </div>
             </div>
+
           </section>
 
-          {/* ==================================================
-              LOGIN FORM
-          ================================================== */}
+          {/* LOGIN FORM */}
 
           <section className="flex items-center bg-white">
+
             <div className="w-full p-6 sm:p-9 lg:p-10 xl:p-12">
+
               <div className="mx-auto w-full max-w-[400px]">
-                {/* Mobile heading */}
+
+                {/* MOBILE HEADING */}
 
                 <div className="mb-8 lg:hidden">
+
                   <div className="mb-2 flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#6366f1]" />
 
@@ -437,11 +483,13 @@ function LoginForm() {
                   <p className="mt-2 text-sm text-[#7a8498]">
                     Sign in to continue to your account.
                   </p>
+
                 </div>
 
-                {/* Desktop heading */}
+                {/* DESKTOP HEADING */}
 
                 <div className="hidden lg:block">
+
                   <div className="mb-3 flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-full bg-[#6366f1]" />
 
@@ -458,19 +506,20 @@ function LoginForm() {
                     Sign in to continue to your
                     Tournament Arena account.
                   </p>
+
                 </div>
 
-                {/* ==================================================
-                    FORM
-                ================================================== */}
+                {/* FORM */}
 
                 <form
                   onSubmit={handleSubmit}
                   className="mt-8 space-y-5"
                 >
-                  {/* Username */}
+
+                  {/* USERNAME */}
 
                   <div>
+
                     <label
                       htmlFor="username"
                       className="mb-1.5 block text-xs font-semibold text-[#465168]"
@@ -479,7 +528,9 @@ function LoginForm() {
                     </label>
 
                     <div className="relative">
+
                       <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa2b2]">
+
                         <svg
                           width="17"
                           height="17"
@@ -499,6 +550,7 @@ function LoginForm() {
                             strokeLinecap="round"
                           />
                         </svg>
+
                       </div>
 
                       <input
@@ -513,13 +565,16 @@ function LoginForm() {
                         disabled={loading}
                         className="h-12 w-full rounded-lg border border-[#dce1ea] bg-[#fafbfc] pl-11 pr-4 text-sm text-[#172033] outline-none transition placeholder:text-[#a3aaba] hover:border-[#c8cedb] focus:border-[#6366f1] focus:bg-white focus:ring-4 focus:ring-[#6366f1]/10 disabled:cursor-not-allowed disabled:opacity-60"
                       />
+
                     </div>
                   </div>
 
-                  {/* Password */}
+                  {/* PASSWORD */}
 
                   <div>
+
                     <div className="mb-1.5 flex items-center justify-between">
+
                       <label
                         htmlFor="password"
                         className="text-xs font-semibold text-[#465168]"
@@ -533,10 +588,13 @@ function LoginForm() {
                       >
                         Forgot password?
                       </Link>
+
                     </div>
 
                     <div className="relative">
+
                       <div className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#9aa2b2]">
+
                         <svg
                           width="17"
                           height="17"
@@ -558,6 +616,7 @@ function LoginForm() {
                             strokeLinecap="round"
                           />
                         </svg>
+
                       </div>
 
                       <input
@@ -590,10 +649,11 @@ function LoginForm() {
                           ? "Hide"
                           : "Show"}
                       </button>
+
                     </div>
                   </div>
 
-                  {/* Remember Me */}
+                  {/* REMEMBER ME */}
 
                   <label
                     htmlFor="rememberMe"
@@ -612,13 +672,14 @@ function LoginForm() {
                     Remember me
                   </label>
 
-                  {/* Error */}
+                  {/* ERROR */}
 
                   {error && (
                     <div
                       role="alert"
                       className="flex items-start gap-3 rounded-lg border border-[#fecaca] bg-[#fff5f5] px-3.5 py-3"
                     >
+
                       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#fee2e2] text-xs font-bold text-[#dc2626]">
                         !
                       </div>
@@ -626,16 +687,18 @@ function LoginForm() {
                       <p className="text-xs leading-5 text-[#dc2626]">
                         {error}
                       </p>
+
                     </div>
                   )}
 
-                  {/* Success */}
+                  {/* SUCCESS */}
 
                   {success && (
                     <div
                       role="status"
                       className="flex items-start gap-3 rounded-lg border border-[#bbf7d0] bg-[#f0fdf4] px-3.5 py-3"
                     >
+
                       <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#dcfce7] text-xs font-bold text-[#16a34a]">
                         ✓
                       </div>
@@ -643,16 +706,18 @@ function LoginForm() {
                       <p className="text-xs leading-5 text-[#15803d]">
                         {success}
                       </p>
+
                     </div>
                   )}
 
-                  {/* Submit */}
+                  {/* SUBMIT */}
 
                   <button
                     type="submit"
                     disabled={loading}
                     className="group flex h-12 w-full items-center justify-center gap-2 rounded-lg bg-[#4f46e5] px-5 text-sm font-bold text-white shadow-[0_6px_18px_rgba(79,70,229,0.20)] transition hover:bg-[#4338ca] hover:shadow-[0_8px_22px_rgba(79,70,229,0.26)] focus:outline-none focus:ring-4 focus:ring-[#6366f1]/20 disabled:cursor-not-allowed disabled:opacity-60"
                   >
+
                     {loading ? (
                       <>
                         <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
@@ -677,14 +742,15 @@ function LoginForm() {
                         </svg>
                       </>
                     )}
+
                   </button>
+
                 </form>
 
-                {/* ==================================================
-                    BOTTOM
-                ================================================== */}
+                {/* BOTTOM */}
 
                 <div className="mt-7 border-t border-[#edf0f4] pt-5 text-center">
+
                   <p className="text-xs text-[#929bad]">
                     New to Tournament Arena?
 
@@ -695,9 +761,11 @@ function LoginForm() {
                       Create an account
                     </Link>
                   </p>
+
                 </div>
 
                 <div className="mt-5 flex items-center justify-between">
+
                   <Link
                     href="/"
                     className="text-[11px] font-medium text-[#9aa2b2] transition hover:text-[#4f46e5]"
@@ -706,15 +774,23 @@ function LoginForm() {
                   </Link>
 
                   <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#b0b6c2]">
+
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+
                     Secure access
+
                   </span>
+
                 </div>
+
               </div>
             </div>
+
           </section>
+
         </div>
       </div>
+
     </main>
   );
 }
@@ -722,11 +798,6 @@ function LoginForm() {
 // ======================================================
 // PAGE WRAPPER
 // ======================================================
-
-// IMPORTANT:
-// useSearchParams() is inside LoginForm.
-// LoginForm is rendered inside Suspense.
-// This is required for Next.js production builds.
 
 export default function LoginPage() {
   return (
