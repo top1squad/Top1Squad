@@ -33,16 +33,6 @@ function generateOtp() {
 // ======================================================
 // GET REGISTRATION SESSION
 // ======================================================
-//
-// Important:
-// registrationId is the ORIGINAL Express session ID.
-//
-// If frontend/backend are on different domains, the verify
-// request may have a different current session ID.
-//
-// Therefore we first check the current session and then
-// directly recover the original session from the session store.
-//
 
 function getRegistrationSession(req, registrationId) {
   return new Promise((resolve, reject) => {
@@ -350,9 +340,10 @@ router.post("/register", async (req, res) => {
     // CHECK USERNAME
     // ==================================================
 
-    const existingUsername = await User.findOne({
-      username: cleanUsername,
-    });
+    const existingUsername =
+      await User.findOne({
+        username: cleanUsername,
+      });
 
     if (existingUsername) {
       return res.status(409).json({
@@ -366,9 +357,10 @@ router.post("/register", async (req, res) => {
     // CHECK MOBILE
     // ==================================================
 
-    const existingMobile = await User.findOne({
-      mobile: cleanMobile,
-    });
+    const existingMobile =
+      await User.findOne({
+        mobile: cleanMobile,
+      });
 
     if (existingMobile) {
       return res.status(409).json({
@@ -382,9 +374,10 @@ router.post("/register", async (req, res) => {
     // CHECK EMAIL
     // ==================================================
 
-    const existingEmail = await User.findOne({
-      email: cleanEmail,
-    });
+    const existingEmail =
+      await User.findOne({
+        email: cleanEmail,
+      });
 
     if (existingEmail) {
       return res.status(409).json({
@@ -1004,10 +997,8 @@ router.post("/verify", async (req, res) => {
 
             return res.status(200).json({
               success: true,
-
               message:
                 "Account created and mobile verified successfully.",
-
               user:
                 getUserData(
                   registeredUser
@@ -1573,6 +1564,7 @@ router.post(
       const otp =
         generateOtp();
 
+      // Create/reset forgot-password session
       req.session.forgotPassword = {
         userId: user._id.toString(),
         mobile: cleanMobile,
@@ -1583,6 +1575,8 @@ router.post(
         verified: false,
       };
 
+      // IMPORTANT:
+      // Save session before sending OTP.
       await new Promise((resolve, reject) => {
         req.session.save((error) => {
           if (error) {
@@ -1592,6 +1586,25 @@ router.post(
           resolve();
         });
       });
+
+      console.log("");
+      console.log("======================================");
+      console.log("FORGOT PASSWORD OTP");
+      console.log("======================================");
+      console.log(
+        "Mobile:",
+        cleanMobile
+      );
+      console.log(
+        "Session ID:",
+        req.sessionID
+      );
+      console.log(
+        "OTP:",
+        otp
+      );
+      console.log(
+        "======================================");
 
       try {
         const response =
@@ -1632,7 +1645,9 @@ router.post(
           .forgotPassword;
 
         await new Promise((resolve) => {
-          req.session.save(() => resolve());
+          req.session.save(() =>
+            resolve()
+          );
         });
 
         return res.status(400).json({
@@ -1652,7 +1667,9 @@ router.post(
           .forgotPassword;
 
         await new Promise((resolve) => {
-          req.session.save(() => resolve());
+          req.session.save(() =>
+            resolve()
+          );
         });
 
         return res.status(502).json({
@@ -1685,8 +1702,15 @@ router.post(
   "/forgot-password/verify-otp",
   async (req, res) => {
     try {
-      const { mobileOtp } =
-        req.body;
+      // ------------------------------------------------
+      // IMPORTANT:
+      // Frontend sends "otp".
+      // Also accept "mobileOtp" for compatibility.
+      // ------------------------------------------------
+
+      const mobileOtp =
+        req.body.otp ||
+        req.body.mobileOtp;
 
       if (!mobileOtp) {
         return res.status(400).json({
@@ -1707,10 +1731,33 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // GET FORGOT PASSWORD SESSION
+      // ------------------------------------------------
+
       const resetData =
         req.session.forgotPassword;
 
+      console.log("");
+      console.log("======================================");
+      console.log(
+        "FORGOT PASSWORD OTP VERIFICATION"
+      );
+      console.log("======================================");
+      console.log(
+        "Current Session ID:",
+        req.sessionID
+      );
+      console.log(
+        "Reset Session Exists:",
+        !!resetData
+      );
+
       if (!resetData) {
+        console.error(
+          "Forgot password session NOT FOUND."
+        );
+
         return res.status(404).json({
           success: false,
           message:
@@ -1718,10 +1765,19 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // CHECK EXPIRY
+      // ------------------------------------------------
+
       if (
+        !resetData.otpExpiresAt ||
         resetData.otpExpiresAt <
-        Date.now()
+          Date.now()
       ) {
+        console.error(
+          "Forgot password OTP expired."
+        );
+
         delete req.session
           .forgotPassword;
 
@@ -1734,8 +1790,14 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // CHECK ATTEMPTS
+      // ------------------------------------------------
+
       if (
-        resetData.otpAttempts >= 5
+        Number(
+          resetData.otpAttempts || 0
+        ) >= 5
       ) {
         delete req.session
           .forgotPassword;
@@ -1749,13 +1811,28 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // CHECK OTP
+      // ------------------------------------------------
+
+      console.log(
+        "Stored OTP:",
+        resetData.otp
+      );
+
+      console.log(
+        "Received OTP:",
+        cleanOtp
+      );
+
       if (
         String(resetData.otp) !==
         cleanOtp
       ) {
         resetData.otpAttempts =
-          (resetData.otpAttempts || 0) +
-          1;
+          Number(
+            resetData.otpAttempts || 0
+          ) + 1;
 
         req.session.forgotPassword =
           resetData;
@@ -1769,16 +1846,57 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // OTP VERIFIED
+      // ------------------------------------------------
+
       req.session.forgotPassword.verified =
         true;
 
-      return req.session.save(() => {
-        return res.status(200).json({
-          success: true,
-          message:
-            "OTP verified successfully.",
-        });
-      });
+      // ------------------------------------------------
+      // SAVE VERIFIED SESSION
+      // ------------------------------------------------
+
+      return req.session.save(
+        (sessionError) => {
+          if (sessionError) {
+            console.error(
+              "Forgot password verified session save error:",
+              sessionError
+            );
+
+            return res.status(500).json({
+              success: false,
+              message:
+                "Unable to create password reset session.",
+            });
+          }
+
+          console.log(
+            "OTP VERIFIED SUCCESSFULLY"
+          );
+
+          console.log(
+            "Reset Session ID:",
+            req.sessionID
+          );
+
+          console.log(
+            "======================================"
+          );
+
+          // IMPORTANT:
+          // Frontend expects resetToken.
+          // We return the current session ID.
+          return res.status(200).json({
+            success: true,
+            message:
+              "OTP verified successfully.",
+            resetToken:
+              req.sessionID,
+          });
+        }
+      );
     } catch (error) {
       console.error(
         "Forgot password verify OTP error:",
@@ -1803,8 +1921,29 @@ router.post(
   "/forgot-password/reset",
   async (req, res) => {
     try {
-      const { password } =
-        req.body;
+      // ------------------------------------------------
+      // IMPORTANT:
+      // Frontend sends "newPassword".
+      // Also accept "password" for compatibility.
+      // ------------------------------------------------
+
+      const password =
+        req.body.newPassword ||
+        req.body.password;
+
+      const resetToken =
+        req.body.resetToken;
+
+      console.log("");
+      console.log("======================================");
+      console.log(
+        "FORGOT PASSWORD RESET REQUEST"
+      );
+      console.log("======================================");
+
+      // ------------------------------------------------
+      // PASSWORD VALIDATION
+      // ------------------------------------------------
 
       if (
         !password ||
@@ -1816,6 +1955,30 @@ router.post(
             "Password must be at least 6 characters.",
         });
       }
+
+      // ------------------------------------------------
+      // RESET TOKEN CHECK
+      // ------------------------------------------------
+
+      if (
+        resetToken &&
+        String(resetToken) !==
+          String(req.sessionID)
+      ) {
+        console.error(
+          "Invalid reset token."
+        );
+
+        return res.status(401).json({
+          success: false,
+          message:
+            "Invalid password reset session. Please request a new OTP.",
+        });
+      }
+
+      // ------------------------------------------------
+      // GET RESET SESSION
+      // ------------------------------------------------
 
       const resetData =
         req.session.forgotPassword;
@@ -1831,6 +1994,31 @@ router.post(
         });
       }
 
+      // ------------------------------------------------
+      // CHECK RESET SESSION EXPIRY
+      // ------------------------------------------------
+
+      if (
+        !resetData.otpExpiresAt ||
+        resetData.otpExpiresAt <
+          Date.now()
+      ) {
+        delete req.session
+          .forgotPassword;
+
+        return req.session.save(() => {
+          return res.status(400).json({
+            success: false,
+            message:
+              "Password reset session expired. Please request a new OTP.",
+          });
+        });
+      }
+
+      // ------------------------------------------------
+      // FIND USER
+      // ------------------------------------------------
+
       const user =
         await User.findById(
           resetData.userId
@@ -1844,22 +2032,62 @@ router.post(
         });
       }
 
-      user.setPassword(
+      // ------------------------------------------------
+      // SET NEW PASSWORD
+      // ------------------------------------------------
+
+      await user.setPassword(
         String(password)
       );
 
       await user.save();
 
+      // ------------------------------------------------
+      // REMOVE RESET DATA
+      // ------------------------------------------------
+
       delete req.session
         .forgotPassword;
 
-      return req.session.save(() => {
-        return res.status(200).json({
-          success: true,
-          message:
-            "Password reset successfully.",
-        });
-      });
+      // ------------------------------------------------
+      // SAVE SESSION
+      // ------------------------------------------------
+
+      return req.session.save(
+        (sessionError) => {
+          if (sessionError) {
+            console.error(
+              "Forgot password session cleanup error:",
+              sessionError
+            );
+
+            return res.status(500).json({
+              success: false,
+              message:
+                "Password changed but reset session cleanup failed.",
+            });
+          }
+
+          console.log(
+            "PASSWORD RESET SUCCESSFULLY"
+          );
+
+          console.log(
+            "User:",
+            user.username
+          );
+
+          console.log(
+            "======================================"
+          );
+
+          return res.status(200).json({
+            success: true,
+            message:
+              "Password reset successfully.",
+          });
+        }
+      );
     } catch (error) {
       console.error(
         "Forgot password reset error:",
