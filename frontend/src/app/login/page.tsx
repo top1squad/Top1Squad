@@ -5,11 +5,15 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 // ======================================================
-// PRODUCTION API CONFIG
+// API CONFIG
 // ======================================================
 
-const API_URL =
-  process.env.NEXT_PUBLIC_API_URL;
+const RAW_API_URL =
+  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+
+const API_URL = RAW_API_URL
+  .replace(/\/+$/, "")
+  .replace(/\/api$/, "");
 
 // ======================================================
 // TYPES
@@ -26,71 +30,41 @@ type LoggedInUser = {
   gameUid?: string;
   bgmiUid?: string;
   freeFireUid?: string;
+  role?: string;
 };
 
 type LoginResponse = {
   success?: boolean;
   message?: string;
-  token?: string;
-  accessToken?: string;
   user?: LoggedInUser;
 };
 
 type MeResponse = {
   success?: boolean;
+  authenticated?: boolean;
   message?: string;
-  user?: LoggedInUser;
+  user?: LoggedInUser | null;
 };
 
 // ======================================================
-// LOGIN PAGE CONTENT
+// LOGIN FORM
 // ======================================================
 
-function LoginPageContent() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // ====================================================
-  // FORM
-  // ====================================================
-
-  const [formData, setFormData] = useState({
-    username: "",
-    password: "",
-    rememberMe: false,
-  });
-
-  // ====================================================
-  // UI STATE
-  // ====================================================
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
 
-  // ====================================================
-  // INPUT CHANGE
-  // ====================================================
-
-  const handleChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const { name, value, type, checked } = event.target;
-
-    setFormData((previous) => ({
-      ...previous,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-
-    if (error) {
-      setError("");
-    }
-  };
-
-  // ====================================================
-  // SAFE REDIRECT
-  // ====================================================
+  // ======================================================
+  // GET REDIRECT DESTINATION
+  // ======================================================
 
   const getDestination = () => {
     const redirect = searchParams.get("redirect");
@@ -106,9 +80,9 @@ function LoginPageContent() {
     return "/";
   };
 
-  // ====================================================
+  // ======================================================
   // LOGIN
-  // ====================================================
+  // ======================================================
 
   const handleSubmit = async (
     event: React.FormEvent<HTMLFormElement>
@@ -116,18 +90,10 @@ function LoginPageContent() {
     event.preventDefault();
 
     setError("");
-    setSuccess("");
 
-    // ==================================================
-    // VALIDATION
-    // ==================================================
+    const cleanUsername = username.trim();
 
-    const username =
-      formData.username.trim().toLowerCase();
-
-    const password = formData.password;
-
-    if (!username) {
+    if (!cleanUsername) {
       setError("Please enter your username.");
       return;
     }
@@ -137,113 +103,58 @@ function LoginPageContent() {
       return;
     }
 
-    // ==================================================
-    // CHECK API CONFIG
-    // ==================================================
-
-    if (
-      !API_URL ||
-      API_URL.includes("YOUR-BACKEND-DOMAIN")
-    ) {
-      setError(
-        "Backend URL is not configured. Please update API_URL in this file."
-      );
-
-      return;
-    }
-
     setLoading(true);
 
     try {
-      // =================================================
-      // LOGIN URL
-      // =================================================
-
-      const loginUrl =
-        `${API_URL}/api/auth/login`;
-
-      console.log("LOGIN REQUEST:", {
-        url: loginUrl,
-        username,
-      });
-
-      // =================================================
+      // ==================================================
       // LOGIN REQUEST
-      // =================================================
+      // ==================================================
 
-      const response = await fetch(loginUrl, {
-        method: "POST",
+      const loginResponse = await fetch(
+        `${API_URL}/api/auth/login`,
+        {
+          method: "POST",
 
-        credentials: "include",
+          credentials: "include",
 
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
 
-        cache: "no-store",
+          body: JSON.stringify({
+            username: cleanUsername,
+            password,
+            rememberMe,
+          }),
+        }
+      );
 
-        body: JSON.stringify({
-          username,
-          password,
-          rememberMe: formData.rememberMe,
-        }),
-      });
-
-      // =================================================
-      // READ RESPONSE
-      // =================================================
-
-      const responseText =
-        await response.text();
-
-      let data: LoginResponse = {};
+      let loginData: LoginResponse;
 
       try {
-        data = JSON.parse(responseText);
+        loginData = await loginResponse.json();
       } catch {
-        console.error(
-          "LOGIN API RETURNED NON-JSON:",
-          responseText
-        );
+        throw new Error("Invalid response from server.");
       }
 
-      console.log("LOGIN RESPONSE:", {
-        status: response.status,
-        ok: response.ok,
-        data,
-      });
+      console.log("LOGIN RESPONSE:", loginData);
 
-      // =================================================
-      // LOGIN FAILED
-      // =================================================
-
-      if (
-        !response.ok ||
-        data.success === false
-      ) {
+      if (!loginResponse.ok || !loginData.success) {
         setError(
-          data.message ||
+          loginData.message ||
             "Invalid username or password."
         );
 
         return;
       }
 
-      // =================================================
-      // VERIFY SESSION
-      // =================================================
-
-      const meUrl =
-        `${API_URL}/api/auth/me`;
-
-      console.log(
-        "VERIFYING SESSION:",
-        meUrl
-      );
+      // ==================================================
+      // VERIFY AUTHENTICATION
+      // ==================================================
 
       const meResponse = await fetch(
-        meUrl,
+        `${API_URL}/api/auth/me`,
         {
           method: "GET",
 
@@ -257,262 +168,237 @@ function LoginPageContent() {
         }
       );
 
-      const meText =
-        await meResponse.text();
-
-      let meData: MeResponse = {};
+      let meData: MeResponse;
 
       try {
-        meData = JSON.parse(meText);
+        meData = await meResponse.json();
       } catch {
-        console.error(
-          "AUTH ME API RETURNED NON-JSON:",
-          meText
-        );
+        throw new Error("Invalid authentication response.");
       }
 
-      console.log("AUTH ME RESPONSE:", {
-        status: meResponse.status,
-        ok: meResponse.ok,
-        data: meData,
-      });
+      console.log("AUTH CHECK:", meData);
 
-      // =================================================
-      // SESSION VERIFICATION FAILED
-      // =================================================
+      // ==================================================
+      // CHECK SESSION
+      // ==================================================
 
       if (
         !meResponse.ok ||
+        !meData.success ||
+        !meData.authenticated ||
         !meData.user
       ) {
         setError(
           meData.message ||
-            "Login succeeded, but the session could not be verified. Please try again."
+            "Login succeeded but your session could not be verified."
         );
 
         return;
       }
 
-      // =================================================
-      // SUCCESS
-      // =================================================
+      // ==================================================
+      // LOGIN SUCCESS
+      // ==================================================
 
-      console.log(
-        "LOGIN + SESSION SUCCESS"
-      );
+      console.log("LOGIN SUCCESS:", meData.user);
 
-      console.log(
-        "USER:",
-        meData.user
-      );
+      const destination = getDestination();
 
-      setSuccess(
-        `Welcome back${
-          meData.user.username
-            ? `, ${meData.user.username}`
-            : ""
-        }!`
-      );
+      router.replace(destination);
+      router.refresh();
 
-      // =================================================
-      // REDIRECT
-      // =================================================
+    } catch (error) {
+      console.error("LOGIN ERROR:", error);
 
-      const destination =
-        getDestination();
-
-      console.log(
-        "REDIRECTING TO:",
-        destination
-      );
-
-      setTimeout(() => {
-        router.replace(destination);
-        router.refresh();
-      }, 300);
-    } catch (err) {
-      console.error(
-        "LOGIN ERROR:",
-        err
-      );
-
-      setError(
-        "Cannot connect to the backend server. Please check your backend URL and CORS configuration."
-      );
+      if (error instanceof Error) {
+        setError(error.message);
+      } else {
+        setError(
+          "Cannot connect to the server. Please try again."
+        );
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  // ====================================================
-  // RENDER
-  // ====================================================
+  // ======================================================
+  // UI
+  // ======================================================
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <div className="flex min-h-screen items-center justify-center px-5 py-10">
-        <div className="w-full max-w-md">
+    <main className="min-h-screen bg-[#090a10] text-white">
 
-          {/* LOGO */}
+      {/* HEADER */}
 
-          <div className="mb-8 text-center">
-            <Link
-              href="/"
-              className="text-2xl font-black"
-            >
+      <header className="border-b border-white/10 bg-[#0d0e15]">
+        <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5">
+
+          <Link
+            href="/"
+            className="text-xl font-extrabold tracking-wide"
+          >
+            TOP
+            <span className="text-[#7da9d8]">
+              1SQUAD
+            </span>
+          </Link>
+
+          <Link
+            href="/register"
+            className="rounded-lg bg-[#5865d8] px-5 py-2.5 text-sm font-semibold transition hover:bg-[#6875e8]"
+          >
+            Create Account
+          </Link>
+
+        </div>
+      </header>
+
+      {/* MAIN */}
+
+      <div className="flex min-h-[calc(100vh-72px)] items-center justify-center px-4 py-10">
+
+        <div className="w-full max-w-[490px]">
+
+          {/* BRAND */}
+
+          <div className="mb-9 text-center">
+
+            <h1 className="text-3xl font-extrabold">
               🎮 TOURNAMENT
               <span className="text-orange-500">
                 ARENA
               </span>
-            </Link>
+            </h1>
 
-            <p className="mt-3 text-sm text-zinc-500">
+            <p className="mt-3 text-sm text-gray-400">
               Welcome back, gamer!
             </p>
+
           </div>
 
           {/* LOGIN CARD */}
 
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 sm:p-8">
+          <div className="rounded-2xl border border-white/10 bg-[#1c1d23] p-8 shadow-2xl">
 
-            <h1 className="text-2xl font-black">
+            <h2 className="text-3xl font-bold">
               Login
-            </h1>
+            </h2>
 
-            <p className="mt-2 text-sm text-zinc-500">
-              Login to manage your tournaments
-              and matches.
+            <p className="mt-2 text-gray-400">
+              Login to manage your tournaments and matches.
             </p>
-
-            {/* FORM */}
 
             <form
               onSubmit={handleSubmit}
-              className="mt-8 space-y-5"
+              className="mt-8 space-y-6"
             >
 
               {/* USERNAME */}
 
               <div>
+
                 <label
                   htmlFor="username"
-                  className="text-sm font-semibold text-zinc-300"
+                  className="mb-2 block font-semibold text-gray-300"
                 >
                   Username
                 </label>
 
                 <input
                   id="username"
-                  name="username"
                   type="text"
-                  value={formData.username}
-                  onChange={handleChange}
-                  placeholder="Enter your username"
+                  value={username}
+                  onChange={(event) => {
+                    setUsername(event.target.value);
+                    setError("");
+                  }}
+                  placeholder="Enter username"
                   autoComplete="username"
-                  autoFocus
                   disabled={loading}
-                  className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 text-black outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:opacity-60"
                 />
+
               </div>
 
               {/* PASSWORD */}
 
               <div>
-                <div className="flex items-center justify-between">
+
+                <div className="mb-2 flex items-center justify-between">
 
                   <label
                     htmlFor="password"
-                    className="text-sm font-semibold text-zinc-300"
+                    className="font-semibold text-gray-300"
                   >
                     Password
                   </label>
 
                   <Link
                     href="/forgot-password"
-                    className="text-xs font-semibold text-orange-500 transition hover:text-orange-400"
+                    className="text-sm font-semibold text-orange-400 hover:text-orange-300"
                   >
                     Forgot password?
                   </Link>
+
                 </div>
 
                 <div className="relative">
 
                   <input
                     id="password"
-                    name="password"
                     type={
                       showPassword
                         ? "text"
                         : "password"
                     }
-                    value={formData.password}
-                    onChange={handleChange}
-                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      setError("");
+                    }}
+                    placeholder="Enter password"
                     autoComplete="current-password"
                     disabled={loading}
-                    className="mt-2 w-full rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 pr-20 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-orange-500 focus:ring-1 focus:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 pr-20 text-black outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:opacity-60"
                   />
 
                   <button
                     type="button"
                     onClick={() =>
-                      setShowPassword(
-                        (previous) =>
-                          !previous
-                      )
+                      setShowPassword((previous) => !previous)
                     }
-                    disabled={loading}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-500 hover:text-white disabled:opacity-50"
+                    className="absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-gray-600"
                   >
-                    {showPassword
-                      ? "Hide"
-                      : "Show"}
+                    {showPassword ? "Hide" : "Show"}
                   </button>
+
                 </div>
+
               </div>
 
               {/* REMEMBER ME */}
 
-              <div className="flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-3 text-gray-400">
 
                 <input
-                  id="rememberMe"
-                  name="rememberMe"
                   type="checkbox"
-                  checked={
-                    formData.rememberMe
+                  checked={rememberMe}
+                  onChange={(event) =>
+                    setRememberMe(event.target.checked)
                   }
-                  onChange={handleChange}
-                  disabled={loading}
                   className="h-4 w-4 accent-orange-500"
                 />
 
-                <label
-                  htmlFor="rememberMe"
-                  className="cursor-pointer text-sm text-zinc-500"
-                >
-                  Remember me
-                </label>
+                Remember me
 
-              </div>
+              </label>
 
               {/* ERROR */}
 
               {error && (
-                <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
-                  <p className="text-sm font-medium text-red-400">
-                    {error}
-                  </p>
-                </div>
-              )}
-
-              {/* SUCCESS */}
-
-              {success && (
-                <div className="rounded-xl border border-green-500/30 bg-green-500/10 px-4 py-3">
-                  <p className="text-sm font-medium text-green-400">
-                    {success}
-                  </p>
+                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-red-400">
+                  {error}
                 </div>
               )}
 
@@ -521,7 +407,7 @@ function LoginPageContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl bg-orange-500 px-5 py-3 font-bold text-black transition hover:bg-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 focus:ring-offset-zinc-900 disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full rounded-xl bg-orange-500 px-4 py-4 text-lg font-bold text-black transition hover:bg-orange-400 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading
                   ? "Logging in..."
@@ -532,57 +418,45 @@ function LoginPageContent() {
 
             {/* REGISTER */}
 
-            <div className="mt-7 border-t border-zinc-800 pt-6 text-center">
+            <div className="mt-8 border-t border-white/10 pt-6 text-center">
 
-              <p className="text-sm text-zinc-500">
+              <p className="text-gray-400">
                 Don't have an account?
               </p>
 
               <Link
                 href="/register"
-                className="mt-2 inline-block font-bold text-orange-500 hover:text-orange-400"
+                className="mt-2 inline-block font-bold text-orange-400 hover:text-orange-300"
               >
                 Create an account
               </Link>
 
             </div>
-          </div>
 
-          {/* BACK HOME */}
-
-          <div className="mt-6 text-center">
-            <Link
-              href="/"
-              className="text-sm text-zinc-600 transition hover:text-white"
-            >
-              ← Back to Home
-            </Link>
           </div>
 
         </div>
+
       </div>
+
     </main>
   );
 }
 
 // ======================================================
-// PAGE WITH SUSPENSE
+// PAGE WRAPPER
 // ======================================================
 
 export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <main className="min-h-screen bg-zinc-950 text-white">
-          <div className="flex min-h-screen items-center justify-center">
-            <p className="text-zinc-500">
-              Loading login...
-            </p>
-          </div>
+        <main className="flex min-h-screen items-center justify-center bg-[#090a10] text-white">
+          Loading...
         </main>
       }
     >
-      <LoginPageContent />
+      <LoginForm />
     </Suspense>
   );
 }

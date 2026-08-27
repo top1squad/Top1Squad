@@ -4,23 +4,21 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require("express-session");
+const MongoStore = require("connect-mongo");
 
 // ======================================================
 // ENVIRONMENT
 // ======================================================
 
-const NODE_ENV =
-  process.env.NODE_ENV || "development";
+const NODE_ENV = process.env.NODE_ENV || "development";
 
-const isProduction =
-  NODE_ENV === "production";
+const isProduction = NODE_ENV === "production";
 
 // ======================================================
 // ENV CONFIG
 // ======================================================
 
-const PORT =
-  Number(process.env.PORT) || 5001;
+const PORT = Number(process.env.PORT) || 5001;
 
 const MONGO_URI =
   process.env.MONGO_URI ||
@@ -28,13 +26,11 @@ const MONGO_URI =
 
 const SESSION_SECRET =
   process.env.SESSION_SECRET ||
-  "tournament-arena-secret";
-
-const COOKIE_DOMAIN =
-  process.env.COOKIE_DOMAIN?.trim() || undefined;
+  "change-this-secret-in-production";
 
 const FRONTEND_URL =
-  process.env.FRONTEND_URL?.trim() || "";
+  process.env.FRONTEND_URL?.trim() ||
+  "http://localhost:3000";
 
 const EXTRA_CORS_ORIGINS =
   process.env.CORS_ORIGINS
@@ -48,62 +44,28 @@ const EXTRA_CORS_ORIGINS =
 // ENV LOG
 // ======================================================
 
-console.log(
-  "========================================"
-);
-
-console.log(
-  "Environment:",
-  NODE_ENV
-);
-
-console.log(
-  "Port:",
-  PORT
-);
-
-console.log(
-  "Frontend URL:",
-  FRONTEND_URL || "Not configured"
-);
-
-console.log(
-  "Cookie Domain:",
-  COOKIE_DOMAIN || "Not configured"
-);
-
-console.log(
-  "MONGO_URI loaded:",
-  !!process.env.MONGO_URI
-);
-
+console.log("========================================");
+console.log("Environment:", NODE_ENV);
+console.log("Port:", PORT);
+console.log("Frontend URL:", FRONTEND_URL);
+console.log("MONGO_URI loaded:", !!process.env.MONGO_URI);
 console.log(
   "SESSION_SECRET loaded:",
   !!process.env.SESSION_SECRET
 );
-
-console.log(
-  "HANUOTP_API_KEY loaded:",
-  !!process.env.HANUOTP_API_KEY
-);
-
-console.log(
-  "========================================"
-);
+console.log("========================================");
 
 // ======================================================
 // PASSPORT
 // ======================================================
 
-const passport =
-  require("./config/passport");
+const passport = require("./config/passport");
 
 // ======================================================
 // MODELS
 // ======================================================
 
-const User =
-  require("./models/User");
+const User = require("./models/User");
 
 // ======================================================
 // ROUTES
@@ -175,6 +137,7 @@ const app = express();
 
 // ======================================================
 // TRUST PROXY
+// IMPORTANT FOR RENDER / RAILWAY / HTTPS
 // ======================================================
 
 if (isProduction) {
@@ -182,7 +145,7 @@ if (isProduction) {
 }
 
 // ======================================================
-// CORS ORIGINS
+// ALLOWED CORS ORIGINS
 // ======================================================
 
 const allowedOrigins = [
@@ -191,103 +154,79 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
 
-  // Production frontend
   FRONTEND_URL,
 
-  // Additional configured origins
   ...EXTRA_CORS_ORIGINS,
 ]
-  .map((origin) =>
-    origin?.trim()
-  )
+  .map((origin) => origin?.trim())
   .filter(Boolean)
   .filter(
     (origin, index, array) =>
       array.indexOf(origin) === index
   );
 
-console.log(
-  "Allowed CORS origins:",
-  allowedOrigins
-);
+console.log("Allowed CORS origins:");
+console.log(allowedOrigins);
 
 // ======================================================
 // CORS
 // ======================================================
 
-app.use(
-  cors({
-    origin: function (
-      origin,
-      callback
-    ) {
-      // Allow requests without Origin.
-      // Useful for curl, Postman and server-to-server requests.
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow Postman, curl, server requests
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (!origin) {
-        return callback(
-          null,
-          true
-        );
-      }
+    // Allow configured origins
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      if (
-        allowedOrigins.includes(
-          origin
-        )
-      ) {
-        return callback(
-          null,
-          true
-        );
-      }
+    console.warn("CORS BLOCKED:", origin);
 
-      console.warn(
-        `CORS blocked origin: ${origin}`
-      );
+    return callback(
+      new Error(`CORS blocked for origin: ${origin}`)
+    );
+  },
 
-      return callback(
-        new Error(
-          "Not allowed by CORS."
-        )
-      );
-    },
+  credentials: true,
 
-    credentials: true,
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
 
-    methods: [
-      "GET",
-      "POST",
-      "PUT",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "Accept",
+  ],
 
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "Accept",
-    ],
+  optionsSuccessStatus: 204,
+};
 
-    optionsSuccessStatus: 204,
-  })
-);
+app.use(cors(corsOptions));
 
 // ======================================================
-// BODY PARSER
+// BODY PARSERS
 // ======================================================
 
 app.use(
   express.json({
-    limit: "2mb",
+    limit: "5mb",
   })
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "2mb",
+    limit: "5mb",
   })
 );
 
@@ -295,24 +234,16 @@ app.use(
 // REQUEST LOGGER
 // ======================================================
 
-app.use(
-  (req, res, next) => {
-    console.log(
-      `[API] ${req.method} ${req.originalUrl}`
-    );
+app.use((req, res, next) => {
+  console.log(
+    `[${new Date().toISOString()}] ${req.method} ${req.originalUrl}`
+  );
 
-    console.log(
-      `[API] Origin: ${
-        req.headers.origin || "none"
-      }`
-    );
-
-    next();
-  }
-);
+  next();
+});
 
 // ======================================================
-// SESSION
+// SESSION COOKIE
 // ======================================================
 
 const sessionCookie = {
@@ -330,43 +261,39 @@ const sessionCookie = {
     60 *
     24 *
     7,
+
+  path: "/",
 };
 
-// Only set domain when explicitly configured.
-
-if (COOKIE_DOMAIN) {
-  sessionCookie.domain =
-    COOKIE_DOMAIN;
-}
-
-console.log(
-  "Session cookie configuration:",
-  {
-    httpOnly:
-      sessionCookie.httpOnly,
-
-    secure:
-      sessionCookie.secure,
-
-    sameSite:
-      sessionCookie.sameSite,
-
-    domain:
-      sessionCookie.domain ||
-      "browser default",
-
-    maxAge:
-      sessionCookie.maxAge,
-  }
-);
+// ======================================================
+// SESSION
+// ======================================================
 
 app.use(
   session({
+    name: "top1squad.sid",
+
     secret: SESSION_SECRET,
 
     resave: false,
 
     saveUninitialized: false,
+
+    rolling: true,
+
+    store: MongoStore.create({
+      mongoUrl: MONGO_URI,
+
+      collectionName: "sessions",
+
+      ttl:
+        60 *
+        60 *
+        24 *
+        7,
+
+      autoRemove: "native",
+    }),
 
     cookie: sessionCookie,
   })
@@ -376,173 +303,168 @@ app.use(
 // PASSPORT
 // ======================================================
 
-app.use(
-  passport.initialize()
-);
+app.use(passport.initialize());
 
-app.use(
-  passport.session()
-);
+app.use(passport.session());
 
 // ======================================================
-// DATABASE
+// SESSION DEBUG
+// ======================================================
+
+app.use((req, res, next) => {
+  console.log("Session ID:", req.sessionID);
+  console.log(
+    "Authenticated:",
+    req.isAuthenticated
+      ? req.isAuthenticated()
+      : false
+  );
+
+  next();
+});
+
+// ======================================================
+// DATABASE CONNECTION
 // ======================================================
 
 mongoose
   .connect(MONGO_URI)
   .then(() => {
+    console.log("========================================");
+    console.log("MongoDB connected successfully");
     console.log(
-      "========================================"
+      "Database:",
+      mongoose.connection.name
     );
-
     console.log(
-      "MongoDB connected successfully"
+      "Host:",
+      mongoose.connection.host
     );
-
-    console.log(
-      `Database: ${mongoose.connection.name}`
-    );
-
-    console.log(
-      `Host: ${mongoose.connection.host}`
-    );
-
-    console.log(
-      "========================================"
-    );
+    console.log("========================================");
   })
   .catch((error) => {
-    console.error(
-      "========================================"
-    );
-
+    console.error("========================================");
     console.error(
       "MongoDB connection error:",
       error.message
     );
+    console.error("========================================");
 
-    console.error(
-      "========================================"
-    );
+    process.exit(1);
   });
 
 // ======================================================
 // DATABASE EVENTS
 // ======================================================
 
-mongoose.connection.on(
-  "connected",
-  () => {
-    console.log(
-      "MongoDB connection established."
-    );
-  }
-);
+mongoose.connection.on("connected", () => {
+  console.log("MongoDB connection established.");
+});
 
-mongoose.connection.on(
-  "error",
-  (error) => {
-    console.error(
-      "MongoDB runtime error:",
-      error
-    );
-  }
-);
+mongoose.connection.on("error", (error) => {
+  console.error(
+    "MongoDB runtime error:",
+    error.message
+  );
+});
 
-mongoose.connection.on(
-  "disconnected",
-  () => {
-    console.warn(
-      "MongoDB disconnected."
-    );
-  }
-);
+mongoose.connection.on("disconnected", () => {
+  console.warn("MongoDB disconnected.");
+});
 
 // ======================================================
 // API ROOT
 // ======================================================
 
-app.get(
-  "/",
-  (req, res) => {
-    return res.status(200).json({
-      success: true,
+app.get("/", (req, res) => {
+  return res.status(200).json({
+    success: true,
 
-      message:
-        "Tournament Arena API is running",
+    message: "Tournament Arena API is running",
 
-      server:
-        "Backend",
+    server: "Backend",
 
-      port:
-        PORT,
+    port: PORT,
 
-      environment:
-        NODE_ENV,
+    environment: NODE_ENV,
 
-      database:
-        mongoose.connection.readyState === 1
-          ? "connected"
-          : "disconnected",
-    });
-  }
-);
+    authenticated:
+      req.isAuthenticated &&
+      req.isAuthenticated(),
+
+    database:
+      mongoose.connection.readyState === 1
+        ? "connected"
+        : "disconnected",
+  });
+});
 
 // ======================================================
 // HEALTH CHECK
 // ======================================================
 
-app.get(
-  "/api/health",
-  (req, res) => {
-    const dbState =
-      mongoose.connection.readyState;
+app.get("/api/health", (req, res) => {
+  const dbState =
+    mongoose.connection.readyState;
 
-    return res.status(200).json({
-      success: true,
+  return res.status(200).json({
+    success: true,
 
-      server:
-        "Tournament Arena API",
+    server: "Tournament Arena API",
 
-      database:
-        dbState === 1
-          ? "connected"
-          : "disconnected",
+    database:
+      dbState === 1
+        ? "connected"
+        : "disconnected",
 
-      databaseState:
-        dbState,
+    databaseState: dbState,
 
-      databaseName:
-        mongoose.connection.name ||
-        null,
+    databaseName:
+      mongoose.connection.name || null,
 
-      databaseHost:
-        mongoose.connection.host ||
-        null,
+    databaseHost:
+      mongoose.connection.host || null,
 
-      environment:
-        NODE_ENV,
+    environment: NODE_ENV,
 
-      timestamp:
-        new Date().toISOString(),
-    });
-  }
-);
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // ======================================================
 // FAVICON
-// IMPORTANT: MUST COME BEFORE 404 MIDDLEWARE
 // ======================================================
 
-app.get(
-  "/favicon.ico",
-  (req, res) => {
-    return res.status(204).end();
-  }
-);
+app.get("/favicon.ico", (req, res) => {
+  return res.status(204).end();
+});
 
 // ======================================================
-// AUTH
+// SESSION TEST
+// ======================================================
+
+app.get("/api/test-session", (req, res) => {
+  return res.status(200).json({
+    success: true,
+
+    sessionID: req.sessionID,
+
+    authenticated:
+      req.isAuthenticated &&
+      req.isAuthenticated(),
+
+    user: req.user
+      ? {
+          id: req.user._id,
+          username: req.user.username,
+          role: req.user.role,
+        }
+      : null,
+  });
+});
+
+// ======================================================
+// AUTH ROUTES
 // ======================================================
 
 app.use(
@@ -607,7 +529,7 @@ app.use(
 );
 
 // ======================================================
-// TDM / SQUAD CLASH USER REGISTRATIONS
+// TDM USER REGISTRATIONS
 // ======================================================
 
 app.use(
@@ -625,7 +547,7 @@ app.use(
 );
 
 // ======================================================
-// ADMIN TDM / SQUAD CLASH REGISTRATIONS
+// ADMIN TDM / SQUAD CLASH
 // ======================================================
 
 app.use(
@@ -644,7 +566,7 @@ app.use(
 );
 
 // ======================================================
-// PROFILE COMPATIBILITY ENDPOINT
+// PROFILE COMPATIBILITY
 // ======================================================
 
 app.get(
@@ -659,49 +581,32 @@ app.get(
       if (!userId) {
         return res.status(401).json({
           success: false,
-
-          authenticated:
-            false,
-
+          authenticated: false,
           user: null,
-
-          message:
-            "You must be logged in.",
+          message: "You must be logged in.",
         });
       }
 
       const user =
-        await User.findById(
-          userId
-        )
-          .select(
-            "-hash -salt -password"
-          )
+        await User.findById(userId)
+          .select("-hash -salt -password")
           .lean();
 
       if (!user) {
         return res.status(404).json({
           success: false,
-
-          authenticated:
-            false,
-
           user: null,
-
-          message:
-            "User not found.",
+          message: "User not found.",
         });
       }
 
       return res.status(200).json({
         success: true,
-
-        authenticated:
-          true,
+        authenticated: true,
 
         user: {
-          id:
-            user._id,
+          _id: user._id,
+          id: user._id,
 
           username:
             user.username || "",
@@ -739,7 +644,6 @@ app.get(
 
       return res.status(500).json({
         success: false,
-
         message:
           error.message ||
           "Failed to load profile.",
@@ -761,258 +665,152 @@ app.use(
 // 404
 // ======================================================
 
-app.use(
-  unknownRoute
-);
+app.use(unknownRoute);
 
 // ======================================================
 // GLOBAL ERROR HANDLER
 // ======================================================
 
-app.use(
-  errorHandler
-);
+app.use(errorHandler);
 
 // ======================================================
-// SERVER
+// START SERVER
 // ======================================================
 
-const server =
-  app.listen(
-    PORT,
-    () => {
-      console.log(
-        "========================================"
-      );
+const server = app.listen(PORT, () => {
+  console.log("");
+  console.log("========================================");
+  console.log("     TOURNAMENT ARENA BACKEND");
+  console.log("========================================");
 
-      console.log(
-        "       TOURNAMENT ARENA BACKEND"
-      );
-
-      console.log(
-        "========================================"
-      );
-
-      console.log(
-        `Server running on port: ${PORT}`
-      );
-
-      console.log(
-        `API health: /api/health`
-      );
-
-      console.log(
-        `Environment: ${NODE_ENV}`
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "AUTH"
-      );
-
-      console.log(
-        "POST   /api/auth/login"
-      );
-
-      console.log(
-        "GET    /api/auth/me"
-      );
-
-      console.log(
-        "GET    /api/auth/current-user"
-      );
-
-      console.log(
-        "GET    /api/auth/profile"
-      );
-
-      console.log(
-        "PATCH  /api/auth/profile"
-      );
-
-      console.log(
-        "PATCH  /api/auth/game-uid"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "PROFILE"
-      );
-
-      console.log(
-        "GET    /api/profile"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "NORMAL TOURNAMENTS"
-      );
-
-      console.log(
-        "Mounted: /api/tournaments"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "TDM / SQUAD CLASH"
-      );
-
-      console.log(
-        "Mounted: /api/squad-clash-tdm"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "USER REGISTRATION ROUTES"
-      );
-
-      console.log(
-        "POST   /api/squad-clash-tdm/registrations"
-      );
-
-      console.log(
-        "GET    /api/squad-clash-tdm/registrations/my"
-      );
-
-      console.log(
-        "GET    /api/squad-clash-tdm/registrations/validate-player-uid"
-      );
-
-      console.log(
-        "GET    /api/squad-clash-tdm/registrations/:tournamentId/slots"
-      );
-
-      console.log(
-        "GET    /api/squad-clash-tdm/registrations/registration/:id"
-      );
-
-      console.log(
-        "PATCH  /api/squad-clash-tdm/registrations/:id/cancel"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "MATCH REGISTRATION COMPATIBILITY"
-      );
-
-      console.log(
-        "GET    /api/squad-clash-tdm/:matchId/registrations"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "ADMIN TDM / SQUAD CLASH"
-      );
-
-      console.log(
-        "GET    /api/admin/squad-clash-tdm/registrations/:tournamentId"
-      );
-
-      console.log(
-        "PATCH  /api/admin/squad-clash-tdm/registrations/:registrationId"
-      );
-
-      console.log(
-        "DELETE /api/admin/squad-clash-tdm/registrations/:registrationId"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "Passport local strategy:"
-      );
-
-      console.log(
-        "REGISTERED"
-      );
-
-      console.log(
-        "----------------------------------------"
-      );
-
-      console.log(
-        "Server started successfully."
-      );
-
-      console.log(
-        "========================================"
-      );
-    }
+  console.log(
+    `Server running on port: ${PORT}`
   );
+
+  console.log(
+    `Environment: ${NODE_ENV}`
+  );
+
+  console.log(
+    `Frontend: ${FRONTEND_URL}`
+  );
+
+  console.log(
+    `Health: /api/health`
+  );
+
+  console.log("");
+  console.log("AUTH ROUTES:");
+
+  console.log(
+    "POST   /api/auth/login"
+  );
+
+  console.log(
+    "GET    /api/auth/me"
+  );
+
+  console.log(
+    "GET    /api/auth/current-user"
+  );
+
+  console.log(
+    "POST   /api/auth/logout"
+  );
+
+  console.log("");
+  console.log("NORMAL TOURNAMENTS:");
+
+  console.log(
+    "Mounted: /api/tournaments"
+  );
+
+  console.log("");
+  console.log("TDM / SQUAD CLASH:");
+
+  console.log(
+    "Mounted: /api/squad-clash-tdm"
+  );
+
+  console.log("");
+  console.log("Server started successfully.");
+
+  console.log("========================================");
+});
 
 // ======================================================
 // GRACEFUL SHUTDOWN
 // ======================================================
 
-const gracefulShutdown =
-  async (signal) => {
-    try {
-      console.log(
-        `${signal} received. Shutting down...`
-      );
+const gracefulShutdown = async (signal) => {
+  try {
+    console.log("");
+    console.log(
+      `${signal} received. Shutting down...`
+    );
 
-      await mongoose.connection.close();
+    server.close(async () => {
+      try {
+        await mongoose.connection.close();
 
-      console.log(
-        "MongoDB connection closed."
-      );
+        console.log(
+          "MongoDB connection closed."
+        );
 
-      server.close(
-        () => {
-          process.exit(0);
-        }
-      );
-    } catch (error) {
-      console.error(
-        "Shutdown error:",
-        error
-      );
+        console.log(
+          "Server stopped successfully."
+        );
 
-      process.exit(1);
-    }
-  };
+        process.exit(0);
+      } catch (error) {
+        console.error(
+          "Shutdown error:",
+          error
+        );
+
+        process.exit(1);
+      }
+    });
+  } catch (error) {
+    console.error(
+      "Graceful shutdown error:",
+      error
+    );
+
+    process.exit(1);
+  }
+};
+
+process.on("SIGINT", () => {
+  gracefulShutdown("SIGINT");
+});
+
+process.on("SIGTERM", () => {
+  gracefulShutdown("SIGTERM");
+});
+
+// ======================================================
+// UNHANDLED ERRORS
+// ======================================================
 
 process.on(
-  "SIGINT",
-  () =>
-    gracefulShutdown(
-      "SIGINT"
-    )
+  "unhandledRejection",
+  (reason) => {
+    console.error(
+      "Unhandled Promise Rejection:",
+      reason
+    );
+  }
 );
 
 process.on(
-  "SIGTERM",
-  () =>
-    gracefulShutdown(
-      "SIGTERM"
-    )
+  "uncaughtException",
+  (error) => {
+    console.error(
+      "Uncaught Exception:",
+      error
+    );
+
+    process.exit(1);
+  }
 );
-
-// ======================================================
-// EXPORT
-// ======================================================
-
-module.exports = app; 
