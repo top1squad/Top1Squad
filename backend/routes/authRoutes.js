@@ -26,10 +26,6 @@ function getUserData(user) {
   };
 }
 
-// ======================================================
-// GENERATE OTP
-// ======================================================
-
 function generateOtp() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -37,19 +33,31 @@ function generateOtp() {
 // ======================================================
 // GET REGISTRATION SESSION
 // ======================================================
-// Supports frontend and backend running on different domains.
-// First checks the current session.
-// If unavailable, recovers the registration session from the
-// session store using registrationId.
-// ======================================================
+//
+// Important:
+// registrationId is the ORIGINAL Express session ID.
+//
+// If frontend/backend are on different domains, the verify
+// request may have a different current session ID.
+//
+// Therefore we first check the current session and then
+// directly recover the original session from the session store.
+//
 
 function getRegistrationSession(req, registrationId) {
   return new Promise((resolve, reject) => {
-    // Normal session
+    if (!registrationId) {
+      return resolve(null);
+    }
+
+    // --------------------------------------------------
+    // Current session
+    // --------------------------------------------------
+
     if (
       req.session &&
-      req.session.pendingRegistration &&
-      req.sessionID === registrationId
+      req.sessionID === registrationId &&
+      req.session.pendingRegistration
     ) {
       return resolve({
         session: req.session,
@@ -58,9 +66,11 @@ function getRegistrationSession(req, registrationId) {
       });
     }
 
-    // Session-store recovery
+    // --------------------------------------------------
+    // Session store recovery
+    // --------------------------------------------------
+
     if (
-      !registrationId ||
       !req.sessionStore ||
       typeof req.sessionStore.get !== "function"
     ) {
@@ -71,6 +81,11 @@ function getRegistrationSession(req, registrationId) {
       registrationId,
       (error, storedSession) => {
         if (error) {
+          console.error(
+            "Registration session store error:",
+            error
+          );
+
           return reject(error);
         }
 
@@ -86,6 +101,83 @@ function getRegistrationSession(req, registrationId) {
           sessionId: registrationId,
           currentSession: false,
         });
+      }
+    );
+  });
+}
+
+// ======================================================
+// SAVE REGISTRATION SESSION
+// ======================================================
+
+function saveRegistrationSession(
+  req,
+  registrationSession
+) {
+  return new Promise((resolve, reject) => {
+    if (!registrationSession) {
+      return reject(
+        new Error("Registration session missing.")
+      );
+    }
+
+    // Current session
+    if (registrationSession.currentSession) {
+      return req.session.save((error) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve();
+      });
+    }
+
+    // Recovered session
+    req.sessionStore.set(
+      registrationSession.sessionId,
+      registrationSession.session,
+      (error) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve();
+      }
+    );
+  });
+}
+
+// ======================================================
+// DESTROY REGISTRATION SESSION
+// ======================================================
+
+function destroyRegistrationSession(
+  req,
+  registrationSession
+) {
+  return new Promise((resolve, reject) => {
+    if (!registrationSession) {
+      return resolve();
+    }
+
+    if (registrationSession.currentSession) {
+      return req.session.destroy((error) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve();
+      });
+    }
+
+    req.sessionStore.destroy(
+      registrationSession.sessionId,
+      (error) => {
+        if (error) {
+          return reject(error);
+        }
+
+        resolve();
       }
     );
   });
@@ -151,10 +243,6 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // ==================================================
-    // PASSWORD
-    // ==================================================
-
     if (!password) {
       return res.status(400).json({
         success: false,
@@ -170,10 +258,6 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    // ==================================================
-    // GAME
-    // ==================================================
-
     if (!game) {
       return res.status(400).json({
         success: false,
@@ -184,14 +268,9 @@ router.post("/register", async (req, res) => {
     if (!["BGMI", "Free Fire"].includes(game)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Game must be BGMI or Free Fire.",
+        message: "Game must be BGMI or Free Fire.",
       });
     }
-
-    // ==================================================
-    // GAME UID
-    // ==================================================
 
     if (!gameUid || !String(gameUid).trim()) {
       return res.status(400).json({
@@ -199,10 +278,6 @@ router.post("/register", async (req, res) => {
         message: "Game UID is required.",
       });
     }
-
-    // ==================================================
-    // UPI ID
-    // ==================================================
 
     if (!upiId || !String(upiId).trim()) {
       return res.status(400).json({
@@ -212,7 +287,7 @@ router.post("/register", async (req, res) => {
     }
 
     if (
-      !/^[\w\.-]+@[\w\.-]+$/.test(
+      !/^[\w.-]+@[\w.-]+$/.test(
         String(upiId).trim()
       )
     ) {
@@ -221,10 +296,6 @@ router.post("/register", async (req, res) => {
         message: "Please enter a valid UPI ID.",
       });
     }
-
-    // ==================================================
-    // TERMS
-    // ==================================================
 
     if (!termsAccepted) {
       return res.status(400).json({
@@ -238,29 +309,23 @@ router.post("/register", async (req, res) => {
     // NORMALIZE
     // ==================================================
 
-    const cleanFullName =
-      String(fullName).trim();
+    const cleanFullName = String(fullName).trim();
 
-    const cleanUsername =
-      String(username)
-        .trim()
-        .toLowerCase();
+    const cleanUsername = String(username)
+      .trim()
+      .toLowerCase();
 
-    const cleanMobile =
-      String(mobile).trim();
+    const cleanMobile = String(mobile).trim();
 
-    const cleanEmail =
-      String(email)
-        .trim()
-        .toLowerCase();
+    const cleanEmail = String(email)
+      .trim()
+      .toLowerCase();
 
-    const cleanGameUid =
-      String(gameUid).trim();
+    const cleanGameUid = String(gameUid).trim();
 
-    const cleanUpiId =
-      String(upiId)
-        .trim()
-        .toLowerCase();
+    const cleanUpiId = String(upiId)
+      .trim()
+      .toLowerCase();
 
     // ==================================================
     // HANUOTP API KEY
@@ -282,13 +347,12 @@ router.post("/register", async (req, res) => {
     }
 
     // ==================================================
-    // CHECK EXISTING USERNAME
+    // CHECK USERNAME
     // ==================================================
 
-    const existingUsername =
-      await User.findOne({
-        username: cleanUsername,
-      });
+    const existingUsername = await User.findOne({
+      username: cleanUsername,
+    });
 
     if (existingUsername) {
       return res.status(409).json({
@@ -299,13 +363,12 @@ router.post("/register", async (req, res) => {
     }
 
     // ==================================================
-    // CHECK EXISTING MOBILE
+    // CHECK MOBILE
     // ==================================================
 
-    const existingMobile =
-      await User.findOne({
-        mobile: cleanMobile,
-      });
+    const existingMobile = await User.findOne({
+      mobile: cleanMobile,
+    });
 
     if (existingMobile) {
       return res.status(409).json({
@@ -316,13 +379,12 @@ router.post("/register", async (req, res) => {
     }
 
     // ==================================================
-    // CHECK EXISTING EMAIL
+    // CHECK EMAIL
     // ==================================================
 
-    const existingEmail =
-      await User.findOne({
-        email: cleanEmail,
-      });
+    const existingEmail = await User.findOne({
+      email: cleanEmail,
+    });
 
     if (existingEmail) {
       return res.status(409).json({
@@ -333,7 +395,7 @@ router.post("/register", async (req, res) => {
     }
 
     // ==================================================
-    // CHECK EXISTING GAME UID
+    // CHECK GAME UID
     // ==================================================
 
     const gameUidQuery =
@@ -369,7 +431,7 @@ router.post("/register", async (req, res) => {
     console.log("Mobile:", cleanMobile);
 
     // ==================================================
-    // STORE TEMPORARY REGISTRATION IN SESSION
+    // STORE REGISTRATION DATA
     // ==================================================
 
     req.session.pendingRegistration = {
@@ -382,133 +444,135 @@ router.post("/register", async (req, res) => {
       gameUid: cleanGameUid,
       upiId: cleanUpiId,
       termsAccepted: true,
+
+      // OTP
       mobileOtp: otp,
       mobileOtpExpiresAt: otpExpiresAt,
       mobileOtpAttempts: 0,
     };
 
     // ==================================================
-    // SAVE SESSION
+    // SAVE SESSION BEFORE SENDING OTP
     // ==================================================
 
-    req.session.save(async (sessionError) => {
-      if (sessionError) {
-        console.error(
-          "Registration session save error:",
-          sessionError
-        );
+    await new Promise((resolve, reject) => {
+      req.session.save((error) => {
+        if (error) {
+          return reject(error);
+        }
 
-        return res.status(500).json({
-          success: false,
-          message:
-            "Unable to start registration. Please try again.",
-        });
-      }
+        resolve();
+      });
+    });
+
+    const registrationId = req.sessionID;
+
+    console.log(
+      "Registration session created:",
+      registrationId
+    );
+
+    // ==================================================
+    // SEND OTP
+    // ==================================================
+
+    console.log("");
+    console.log("======================================");
+    console.log("SENDING OTP THROUGH HANUOTP");
+    console.log("======================================");
+
+    try {
+      const response = await axios.get(
+        "https://api.hanuotp.in/sms-otp.php",
+        {
+          params: {
+            number: cleanMobile,
+            OTP: otp,
+            apikey: hanuOtpApiKey,
+            templatesid: "default",
+          },
+          timeout: 15000,
+        }
+      );
+
+      console.log(
+        "HanuOTP response:",
+        response.data
+      );
 
       // ==================================================
-      // SEND OTP USING HANUOTP
+      // SUCCESS
       // ==================================================
 
-      console.log("");
-      console.log("======================================");
-      console.log("SENDING OTP THROUGH HANUOTP");
-      console.log("======================================");
-      console.log("Mobile:", cleanMobile);
-
-      try {
-        const response = await axios.get(
-          "https://api.hanuotp.in/sms-otp.php",
-          {
-            params: {
-              number: cleanMobile,
-              OTP: otp,
-              apikey: hanuOtpApiKey,
-              templatesid: "default",
-            },
-            timeout: 15000,
-          }
+      if (
+        response.data &&
+        response.data.status === "success"
+      ) {
+        console.log(
+          "OTP SENT SUCCESSFULLY"
         );
 
         console.log(
-          "HanuOTP response:",
-          response.data
+          "Registration ID:",
+          registrationId
         );
 
-        // ==================================================
-        // HANUOTP SUCCESS
-        // ==================================================
-
-        if (
-          response.data &&
-          response.data.status === "success"
-        ) {
-          console.log(
-            "OTP SENT SUCCESSFULLY"
-          );
-
-          console.log(
-            "Registration ID:",
-            req.sessionID
-          );
-
-          console.log(
-            "======================================"
-          );
-
-          return res.status(201).json({
-            success: true,
-            message:
-              "OTP sent successfully to your mobile number.",
-            registrationId:
-              req.sessionID,
-            mobile:
-              cleanMobile,
-            email:
-              cleanEmail,
-            username:
-              cleanUsername,
-            game:
-              game,
-          });
-        }
-
-        // ==================================================
-        // HANUOTP FAILED
-        // ==================================================
-
-        console.error(
-          "HanuOTP rejected request:",
-          response.data
+        console.log(
+          "======================================"
         );
 
-        delete req.session.pendingRegistration;
-
-        return req.session.save(() => {
-          return res.status(400).json({
-            success: false,
-            message:
-              response.data?.message ||
-              "Unable to send OTP. Please try again.",
-          });
-        });
-      } catch (otpError) {
-        console.error(
-          "HanuOTP request error:",
-          otpError.response?.data ||
-            otpError.message
-        );
-
-        delete req.session.pendingRegistration;
-
-        return req.session.save(() => {
-          return res.status(502).json({
-            success: false,
-            message:
-              "Unable to send OTP. Please try again.",
-          });
+        return res.status(201).json({
+          success: true,
+          message:
+            "OTP sent successfully to your mobile number.",
+          registrationId: registrationId,
+          mobile: cleanMobile,
+          email: cleanEmail,
+          username: cleanUsername,
+          game: game,
         });
       }
-    });
+
+      // ==================================================
+      // HANUOTP FAILED
+      // ==================================================
+
+      console.error(
+        "HanuOTP rejected request:",
+        response.data
+      );
+
+      delete req.session.pendingRegistration;
+
+      await new Promise((resolve) => {
+        req.session.save(() => resolve());
+      });
+
+      return res.status(400).json({
+        success: false,
+        message:
+          response.data?.message ||
+          "Unable to send OTP. Please try again.",
+      });
+    } catch (otpError) {
+      console.error(
+        "HanuOTP request error:",
+        otpError.response?.data ||
+          otpError.message
+      );
+
+      delete req.session.pendingRegistration;
+
+      await new Promise((resolve) => {
+        req.session.save(() => resolve());
+      });
+
+      return res.status(502).json({
+        success: false,
+        message:
+          "Unable to send OTP. Please try again.",
+      });
+    }
   } catch (error) {
     console.error(
       "Register error:",
@@ -539,9 +603,15 @@ router.post("/verify", async (req, res) => {
     console.log("======================================");
     console.log("OTP VERIFICATION REQUEST");
     console.log("======================================");
+
     console.log(
       "Registration ID received:",
       registrationId
+    );
+
+    console.log(
+      "Current request session:",
+      req.sessionID
     );
 
     // ==================================================
@@ -575,17 +645,17 @@ router.post("/verify", async (req, res) => {
     }
 
     // ==================================================
-    // GET REGISTRATION SESSION
+    // RECOVER REGISTRATION SESSION
     // ==================================================
 
     const registrationSession =
       await getRegistrationSession(
         req,
-        registrationId
+        String(registrationId)
       );
 
     if (!registrationSession) {
-      console.log(
+      console.error(
         "Registration session NOT FOUND:",
         registrationId
       );
@@ -602,114 +672,130 @@ router.post("/verify", async (req, res) => {
       registrationSession.sessionId
     );
 
+    console.log(
+      "Using current session:",
+      registrationSession.currentSession
+    );
+
     const registration =
       registrationSession.session.pendingRegistration;
+
+    if (!registration) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Registration data not found. Please register again.",
+      });
+    }
 
     // ==================================================
     // OTP EXPIRY
     // ==================================================
 
     if (
+      !registration.mobileOtpExpiresAt ||
       registration.mobileOtpExpiresAt <
-      Date.now()
+        Date.now()
     ) {
-      delete registrationSession.session
-        .pendingRegistration;
-
-      if (
-        registrationSession.currentSession
-      ) {
-        return req.session.save(() => {
-          return res.status(400).json({
-            success: false,
-            message:
-              "OTP has expired. Please register again.",
-          });
-        });
+      try {
+        await destroyRegistrationSession(
+          req,
+          registrationSession
+        );
+      } catch (destroyError) {
+        console.error(
+          "OTP expired session cleanup error:",
+          destroyError
+        );
       }
 
-      return req.sessionStore.destroy(
-        registrationSession.sessionId,
-        () => {
-          return res.status(400).json({
-            success: false,
-            message:
-              "OTP has expired. Please register again.",
-          });
-        }
-      );
+      return res.status(400).json({
+        success: false,
+        message:
+          "OTP has expired. Please register again.",
+      });
     }
 
     // ==================================================
     // OTP ATTEMPTS
     // ==================================================
 
-    if (
-      registration.mobileOtpAttempts >= 5
-    ) {
-      delete registrationSession.session
-        .pendingRegistration;
+    const attempts =
+      Number(
+        registration.mobileOtpAttempts || 0
+      );
 
-      if (
-        registrationSession.currentSession
-      ) {
-        return req.session.save(() => {
-          return res.status(429).json({
-            success: false,
-            message:
-              "Maximum OTP attempts exceeded. Please register again.",
-          });
-        });
+    if (attempts >= 5) {
+      try {
+        await destroyRegistrationSession(
+          req,
+          registrationSession
+        );
+      } catch (destroyError) {
+        console.error(
+          "OTP attempts cleanup error:",
+          destroyError
+        );
       }
 
-      return req.sessionStore.destroy(
-        registrationSession.sessionId,
-        () => {
-          return res.status(429).json({
-            success: false,
-            message:
-              "Maximum OTP attempts exceeded. Please register again.",
-          });
-        }
-      );
+      return res.status(429).json({
+        success: false,
+        message:
+          "Maximum OTP attempts exceeded. Please register again.",
+      });
     }
 
     // ==================================================
     // OTP CHECK
     // ==================================================
 
+    console.log(
+      "Stored OTP:",
+      registration.mobileOtp
+    );
+
+    console.log(
+      "Received OTP:",
+      cleanOtp
+    );
+
     if (
       String(registration.mobileOtp) !==
       cleanOtp
     ) {
       registration.mobileOtpAttempts =
-        (registration.mobileOtpAttempts || 0) + 1;
+        attempts + 1;
 
       registrationSession.session.pendingRegistration =
         registration;
 
-      if (
-        registrationSession.currentSession
-      ) {
-        return req.session.save(() => {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid OTP.",
-          });
+      try {
+        await saveRegistrationSession(
+          req,
+          registrationSession
+        );
+      } catch (saveError) {
+        console.error(
+          "OTP attempt save error:",
+          saveError
+        );
+
+        return res.status(500).json({
+          success: false,
+          message:
+            "Unable to save OTP attempt. Please try again.",
         });
       }
 
-      return req.sessionStore.set(
-        registrationSession.sessionId,
-        registrationSession.session,
-        () => {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid OTP.",
-          });
-        }
-      );
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP.",
+      });
     }
+
+    console.log(
+      "OTP MATCHED SUCCESSFULLY"
+    );
 
     // ==================================================
     // CHECK USERNAME AGAIN
@@ -717,8 +803,7 @@ router.post("/verify", async (req, res) => {
 
     const existingUsername =
       await User.findOne({
-        username:
-          registration.username,
+        username: registration.username,
       });
 
     if (existingUsername) {
@@ -735,8 +820,7 @@ router.post("/verify", async (req, res) => {
 
     const existingMobile =
       await User.findOne({
-        mobile:
-          registration.mobile,
+        mobile: registration.mobile,
       });
 
     if (existingMobile) {
@@ -753,8 +837,7 @@ router.post("/verify", async (req, res) => {
 
     const existingEmail =
       await User.findOne({
-        email:
-          registration.email,
+        email: registration.email,
       });
 
     if (existingEmail) {
@@ -800,20 +883,28 @@ router.post("/verify", async (req, res) => {
     const user = new User({
       fullName:
         registration.fullName,
+
       username:
         registration.username,
+
       mobile:
         registration.mobile,
+
       email:
         registration.email,
+
       game:
         registration.game,
+
       gameUid:
         registration.gameUid,
+
       upiId:
         registration.upiId,
+
       termsAccepted:
         registration.termsAccepted,
+
       role: "user",
     });
 
@@ -827,35 +918,27 @@ router.post("/verify", async (req, res) => {
         registration.password
       );
 
+    console.log(
+      "USER CREATED:",
+      registeredUser.username
+    );
+
     // ==================================================
-    // REMOVE ONLY TEMPORARY REGISTRATION
-    // ==================================================
-    // Do NOT destroy the complete session.
-    // Passport can then create the login session.
+    // REMOVE TEMP REGISTRATION DATA
     // ==================================================
 
-    if (
-      registrationSession.currentSession
-    ) {
-      delete req.session.pendingRegistration;
-    } else {
-      delete registrationSession.session
-        .pendingRegistration;
+    registrationSession.session.pendingRegistration =
+      undefined;
 
-      await new Promise(
-        (resolve, reject) => {
-          req.sessionStore.set(
-            registrationSession.sessionId,
-            registrationSession.session,
-            (error) => {
-              if (error) {
-                return reject(error);
-              }
-
-              resolve();
-            }
-          );
-        }
+    try {
+      await saveRegistrationSession(
+        req,
+        registrationSession
+      );
+    } catch (cleanupError) {
+      console.error(
+        "Temporary registration cleanup error:",
+        cleanupError
       );
     }
 
@@ -865,7 +948,7 @@ router.post("/verify", async (req, res) => {
 
     req.login(
       registeredUser,
-      (loginError) => {
+      async (loginError) => {
         if (loginError) {
           console.error(
             "Auto login error:",
@@ -899,6 +982,10 @@ router.post("/verify", async (req, res) => {
             }
 
             console.log(
+              "======================================"
+            );
+
+            console.log(
               "USER CREATED SUCCESSFULLY"
             );
 
@@ -917,8 +1004,10 @@ router.post("/verify", async (req, res) => {
 
             return res.status(200).json({
               success: true,
+
               message:
                 "Account created and mobile verified successfully.",
+
               user:
                 getUserData(
                   registeredUser
@@ -1124,10 +1213,7 @@ router.patch(
         upiId,
       } = req.body;
 
-      // ==================================================
       // FULL NAME
-      // ==================================================
-
       if (fullName !== undefined) {
         const cleanFullName =
           String(fullName).trim();
@@ -1144,10 +1230,7 @@ router.patch(
           cleanFullName;
       }
 
-      // ==================================================
       // USERNAME
-      // ==================================================
-
       if (username !== undefined) {
         const cleanUsername =
           String(username)
@@ -1183,10 +1266,7 @@ router.patch(
           cleanUsername;
       }
 
-      // ==================================================
       // EMAIL
-      // ==================================================
-
       if (email !== undefined) {
         const cleanEmail =
           String(email)
@@ -1226,10 +1306,7 @@ router.patch(
           cleanEmail;
       }
 
-      // ==================================================
       // MOBILE
-      // ==================================================
-
       if (mobile !== undefined) {
         const cleanMobile =
           String(mobile).trim();
@@ -1267,10 +1344,7 @@ router.patch(
           cleanMobile;
       }
 
-      // ==================================================
       // UPI ID
-      // ==================================================
-
       if (upiId !== undefined) {
         const cleanUpiId =
           String(upiId)
@@ -1279,7 +1353,7 @@ router.patch(
 
         if (
           cleanUpiId &&
-          !/^[\w\.-]+@[\w\.-]+$/.test(
+          !/^[\w.-]+@[\w.-]+$/.test(
             cleanUpiId
           )
         ) {
@@ -1489,10 +1563,6 @@ router.post(
         process.env.HANUOTP_API_KEY;
 
       if (!hanuOtpApiKey) {
-        console.error(
-          "HANUOTP_API_KEY is missing."
-        );
-
         return res.status(500).json({
           success: false,
           message:
@@ -1513,87 +1583,84 @@ router.post(
         verified: false,
       };
 
-      req.session.save(
-        async (sessionError) => {
-          if (sessionError) {
-            console.error(
-              "Forgot password session error:",
-              sessionError
-            );
-
-            return res.status(500).json({
-              success: false,
-              message:
-                "Unable to start password reset.",
-            });
+      await new Promise((resolve, reject) => {
+        req.session.save((error) => {
+          if (error) {
+            return reject(error);
           }
 
-          try {
-            const response =
-              await axios.get(
-                "https://api.hanuotp.in/sms-otp.php",
-                {
-                  params: {
-                    number:
-                      cleanMobile,
-                    OTP: otp,
-                    apikey:
-                      hanuOtpApiKey,
-                    templatesid:
-                      "default",
-                  },
-                  timeout: 15000,
-                }
-              );
+          resolve();
+        });
+      });
 
-            console.log(
-              "Forgot password HanuOTP:",
-              response.data
-            );
-
-            if (
-              response.data &&
-              response.data.status ===
-                "success"
-            ) {
-              return res.status(200).json({
-                success: true,
-                message:
-                  "OTP sent successfully.",
-              });
+      try {
+        const response =
+          await axios.get(
+            "https://api.hanuotp.in/sms-otp.php",
+            {
+              params: {
+                number:
+                  cleanMobile,
+                OTP: otp,
+                apikey:
+                  hanuOtpApiKey,
+                templatesid:
+                  "default",
+              },
+              timeout: 15000,
             }
+          );
 
-            delete req.session
-              .forgotPassword;
+        console.log(
+          "Forgot password HanuOTP:",
+          response.data
+        );
 
-            return req.session.save(() => {
-              return res.status(400).json({
-                success: false,
-                message:
-                  response.data?.message ||
-                  "Unable to send OTP. Please try again.",
-              });
-            });
-          } catch (otpError) {
-            console.error(
-              "Forgot password OTP error:",
-              otpError.response?.data ||
-                otpError.message
-            );
-
-            delete req.session
-              .forgotPassword;
-
-            return req.session.save(() => {
-              return res.status(502).json({
-                success: false,
-                message:
-                  "Unable to send OTP. Please try again.",
-              });
-            });
-          }
+        if (
+          response.data &&
+          response.data.status ===
+            "success"
+        ) {
+          return res.status(200).json({
+            success: true,
+            message:
+              "OTP sent successfully.",
+          });
         }
-      );
+
+        delete req.session
+          .forgotPassword;
+
+        await new Promise((resolve) => {
+          req.session.save(() => resolve());
+        });
+
+        return res.status(400).json({
+          success: false,
+          message:
+            response.data?.message ||
+            "Unable to send OTP. Please try again.",
+        });
+      } catch (otpError) {
+        console.error(
+          "Forgot password OTP error:",
+          otpError.response?.data ||
+            otpError.message
+        );
+
+        delete req.session
+          .forgotPassword;
+
+        await new Promise((resolve) => {
+          req.session.save(() => resolve());
+        });
+
+        return res.status(502).json({
+          success: false,
+          message:
+            "Unable to send OTP. Please try again.",
+        });
+      }
     } catch (error) {
       console.error(
         "Forgot password send OTP error:",
@@ -1777,8 +1844,6 @@ router.post(
         });
       }
 
-      // Passport-Local-Mongoose
-      // password update
       user.setPassword(
         String(password)
       );
