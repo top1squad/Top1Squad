@@ -1,25 +1,22 @@
 "use client";
 
-import Link from "next/link";
-import { Suspense, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 
-// ======================================================
-// API CONFIG
-// ======================================================
+/*
+|--------------------------------------------------------------------------
+| TypeScript declaration for process.env
+|--------------------------------------------------------------------------
+| This prevents the "Cannot find name 'process'" error when
+| @types/node is not available in the frontend project.
+*/
 
-const RAW_API_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001";
+declare const process: {
+  env: {
+    NEXT_PUBLIC_API_URL?: string;
+  };
+};
 
-const API_URL = RAW_API_URL
-  .replace(/\/+$/, "")
-  .replace(/\/api$/, "");
-
-// ======================================================
-// TYPES
-// ======================================================
-
-type LoggedInUser = {
+interface User {
   _id?: string;
   id?: string;
   username?: string;
@@ -31,67 +28,53 @@ type LoggedInUser = {
   bgmiUid?: string;
   freeFireUid?: string;
   role?: string;
-};
+}
 
-type LoginResponse = {
-  success?: boolean;
-  message?: string;
-  user?: LoggedInUser;
-};
-
-type MeResponse = {
+interface ApiResponse {
   success?: boolean;
   authenticated?: boolean;
   message?: string;
-  user?: LoggedInUser | null;
-};
+  user?: User | null;
+}
 
-// ======================================================
-// LOGIN FORM
-// ======================================================
+export default function LoginPage() {
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
+  const [rememberMe, setRememberMe] = useState<boolean>(true);
+  const [showPassword, setShowPassword] =
+    useState<boolean>(false);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
-function LoginForm() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  /*
+  |--------------------------------------------------------------------------
+  | API URL
+  |--------------------------------------------------------------------------
+  |
+  | Local:
+  | NEXT_PUBLIC_API_URL=http://localhost:5001
+  |
+  | Production:
+  | NEXT_PUBLIC_API_URL=https://your-backend.onrender.com
+  |
+  | Do NOT add /api here.
+  |
+  */
 
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMe] = useState(true);
+  const API_URL: string = (
+    process.env.NEXT_PUBLIC_API_URL ||
+    "http://localhost:5001"
+  ).replace(/\/+$/, "");
 
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-
-  // ======================================================
-  // GET REDIRECT DESTINATION
-  // ======================================================
-
-  const getDestination = () => {
-    const redirect = searchParams.get("redirect");
-
-    if (
-      redirect &&
-      redirect.startsWith("/") &&
-      !redirect.startsWith("//")
-    ) {
-      return redirect;
-    }
-
-    return "/";
-  };
-
-  // ======================================================
-  // LOGIN
-  // ======================================================
-
-  const handleSubmit = async (
+  async function handleLogin(
     event: React.FormEvent<HTMLFormElement>
-  ) => {
+  ): Promise<void> {
     event.preventDefault();
 
     setError("");
 
-    const cleanUsername = username.trim();
+    const cleanUsername: string =
+      username.trim();
 
     if (!cleanUsername) {
       setError("Please enter your username.");
@@ -106,41 +89,43 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      // ==================================================
-      // LOGIN REQUEST
-      // ==================================================
+      /*
+      |--------------------------------------------------------------------------
+      | LOGIN
+      |--------------------------------------------------------------------------
+      */
 
-      const loginResponse = await fetch(
-        `${API_URL}/api/auth/login`,
-        {
-          method: "POST",
+      const loginResponse: Response =
+        await fetch(
+          `${API_URL}/api/auth/login`,
+          {
+            method: "POST",
 
-          credentials: "include",
+            credentials: "include",
 
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+            },
 
-          body: JSON.stringify({
-            username: cleanUsername,
-            password,
-            rememberMe,
-          }),
-        }
-      );
+            body: JSON.stringify({
+              username: cleanUsername,
+              password: password,
+              rememberMe: rememberMe,
+            }),
+          }
+        );
 
-      let loginData: LoginResponse;
+      let loginData: ApiResponse = {};
 
       try {
-        loginData = await loginResponse.json();
+        loginData =
+          await loginResponse.json();
       } catch {
-        throw new Error("Invalid response from server.");
+        loginData = {};
       }
 
-      console.log("LOGIN RESPONSE:", loginData);
-
-      if (!loginResponse.ok || !loginData.success) {
+      if (!loginResponse.ok) {
         setError(
           loginData.message ||
             "Invalid username or password."
@@ -149,82 +134,93 @@ function LoginForm() {
         return;
       }
 
-      // ==================================================
-      // VERIFY AUTHENTICATION
-      // ==================================================
-
-      const meResponse = await fetch(
-        `${API_URL}/api/auth/me`,
-        {
-          method: "GET",
-
-          credentials: "include",
-
-          headers: {
-            Accept: "application/json",
-          },
-
-          cache: "no-store",
-        }
-      );
-
-      let meData: MeResponse;
-
-      try {
-        meData = await meResponse.json();
-      } catch {
-        throw new Error("Invalid authentication response.");
-      }
-
-      console.log("AUTH CHECK:", meData);
-
-      // ==================================================
-      // CHECK SESSION
-      // ==================================================
-
-      if (
-        !meResponse.ok ||
-        !meData.success ||
-        !meData.authenticated ||
-        !meData.user
-      ) {
+      if (loginData.success === false) {
         setError(
-          meData.message ||
-            "Login succeeded but your session could not be verified."
+          loginData.message ||
+            "Invalid username or password."
         );
 
         return;
       }
 
-      // ==================================================
-      // LOGIN SUCCESS
-      // ==================================================
+      /*
+      |--------------------------------------------------------------------------
+      | CHECK SESSION
+      |--------------------------------------------------------------------------
+      */
 
-      console.log("LOGIN SUCCESS:", meData.user);
+      const sessionResponse: Response =
+        await fetch(
+          `${API_URL}/api/auth/me`,
+          {
+            method: "GET",
 
-      const destination = getDestination();
+            credentials: "include",
 
-      router.replace(destination);
-      router.refresh();
+            headers: {
+              Accept: "application/json",
+            },
 
-    } catch (error) {
-      console.error("LOGIN ERROR:", error);
-
-      if (error instanceof Error) {
-        setError(error.message);
-      } else {
-        setError(
-          "Cannot connect to the server. Please try again."
+            cache: "no-store",
+          }
         );
+
+      let sessionData: ApiResponse = {};
+
+      try {
+        sessionData =
+          await sessionResponse.json();
+      } catch {
+        sessionData = {};
       }
+
+      if (!sessionResponse.ok) {
+        setError(
+          sessionData.message ||
+            "Unable to verify your login session."
+        );
+
+        return;
+      }
+
+      if (
+        sessionData.authenticated === false
+      ) {
+        setError(
+          "Your login session could not be verified."
+        );
+
+        return;
+      }
+
+      if (!sessionData.user) {
+        setError(
+          "Login succeeded, but no user session was found."
+        );
+
+        return;
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | SUCCESS
+      |--------------------------------------------------------------------------
+      */
+
+      window.location.href = "/";
+    } catch (err: unknown) {
+      console.error(
+        "LOGIN ERROR:",
+        err
+      );
+
+      setError(
+        "Unable to connect to the server. Please try again."
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  // ======================================================
-  // UI
-  // ======================================================
+  }
 
   return (
     <main className="min-h-screen bg-[#090a10] text-white">
@@ -232,9 +228,10 @@ function LoginForm() {
       {/* HEADER */}
 
       <header className="border-b border-white/10 bg-[#0d0e15]">
+
         <div className="mx-auto flex h-[72px] max-w-7xl items-center justify-between px-5">
 
-          <Link
+          <a
             href="/"
             className="text-xl font-extrabold tracking-wide"
           >
@@ -242,33 +239,37 @@ function LoginForm() {
             <span className="text-[#7da9d8]">
               1SQUAD
             </span>
-          </Link>
+          </a>
 
-          <Link
+          <a
             href="/register"
             className="rounded-lg bg-[#5865d8] px-5 py-2.5 text-sm font-semibold transition hover:bg-[#6875e8]"
           >
             Create Account
-          </Link>
+          </a>
 
         </div>
+
       </header>
 
-      {/* MAIN */}
+      {/* LOGIN SECTION */}
 
-      <div className="flex min-h-[calc(100vh-72px)] items-center justify-center px-4 py-10">
+      <section className="flex min-h-[calc(100vh-72px)] items-center justify-center px-4 py-10">
 
         <div className="w-full max-w-[490px]">
 
-          {/* BRAND */}
+          {/* TITLE */}
 
           <div className="mb-9 text-center">
 
             <h1 className="text-3xl font-extrabold">
+
               🎮 TOURNAMENT
+
               <span className="text-orange-500">
                 ARENA
               </span>
+
             </h1>
 
             <p className="mt-3 text-sm text-gray-400">
@@ -277,7 +278,7 @@ function LoginForm() {
 
           </div>
 
-          {/* LOGIN CARD */}
+          {/* CARD */}
 
           <div className="rounded-2xl border border-white/10 bg-[#1c1d23] p-8 shadow-2xl">
 
@@ -286,11 +287,14 @@ function LoginForm() {
             </h2>
 
             <p className="mt-2 text-gray-400">
-              Login to manage your tournaments and matches.
+              Login to manage your tournaments
+              and matches.
             </p>
 
+            {/* FORM */}
+
             <form
-              onSubmit={handleSubmit}
+              onSubmit={handleLogin}
               className="mt-8 space-y-6"
             >
 
@@ -307,16 +311,21 @@ function LoginForm() {
 
                 <input
                   id="username"
+                  name="username"
                   type="text"
                   value={username}
-                  onChange={(event) => {
-                    setUsername(event.target.value);
-                    setError("");
-                  }}
+                  onChange={(
+                    event
+                  ) =>
+                    setUsername(
+                      event.target.value
+                    )
+                  }
                   placeholder="Enter username"
                   autoComplete="username"
                   disabled={loading}
-                  className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 text-black outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:opacity-60"
+                  required
+                  className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 text-black outline-none placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                 />
 
               </div>
@@ -334,12 +343,12 @@ function LoginForm() {
                     Password
                   </label>
 
-                  <Link
+                  <a
                     href="/forgot-password"
                     className="text-sm font-semibold text-orange-400 hover:text-orange-300"
                   >
                     Forgot password?
-                  </Link>
+                  </a>
 
                 </div>
 
@@ -347,57 +356,77 @@ function LoginForm() {
 
                   <input
                     id="password"
+                    name="password"
                     type={
                       showPassword
                         ? "text"
                         : "password"
                     }
                     value={password}
-                    onChange={(event) => {
-                      setPassword(event.target.value);
-                      setError("");
-                    }}
+                    onChange={(
+                      event
+                    ) =>
+                      setPassword(
+                        event.target.value
+                      )
+                    }
                     placeholder="Enter password"
                     autoComplete="current-password"
                     disabled={loading}
-                    className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 pr-20 text-black outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:opacity-60"
+                    required
+                    className="w-full rounded-xl border border-white/10 bg-[#ffffc7] px-4 py-3 pr-20 text-black outline-none placeholder:text-gray-500 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30 disabled:cursor-not-allowed disabled:opacity-60"
                   />
 
                   <button
                     type="button"
                     onClick={() =>
-                      setShowPassword((previous) => !previous)
+                      setShowPassword(
+                        (value) => !value
+                      )
                     }
-                    className="absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-gray-600"
+                    disabled={loading}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-semibold text-gray-600 hover:text-black"
                   >
-                    {showPassword ? "Hide" : "Show"}
+                    {showPassword
+                      ? "Hide"
+                      : "Show"}
                   </button>
 
                 </div>
 
               </div>
 
-              {/* REMEMBER ME */}
+              {/* REMEMBER */}
 
               <label className="flex cursor-pointer items-center gap-3 text-gray-400">
 
                 <input
                   type="checkbox"
                   checked={rememberMe}
-                  onChange={(event) =>
-                    setRememberMe(event.target.checked)
+                  onChange={(
+                    event
+                  ) =>
+                    setRememberMe(
+                      event.target.checked
+                    )
                   }
+                  disabled={loading}
                   className="h-4 w-4 accent-orange-500"
                 />
 
-                Remember me
+                <span>
+                  Remember me
+                </span>
 
               </label>
 
               {/* ERROR */}
 
               {error && (
-                <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-red-400">
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400"
+                >
                   {error}
                 </div>
               )}
@@ -424,12 +453,12 @@ function LoginForm() {
                 Don't have an account?
               </p>
 
-              <Link
+              <a
                 href="/register"
                 className="mt-2 inline-block font-bold text-orange-400 hover:text-orange-300"
               >
                 Create an account
-              </Link>
+              </a>
 
             </div>
 
@@ -437,26 +466,8 @@ function LoginForm() {
 
         </div>
 
-      </div>
+      </section>
 
     </main>
-  );
-}
-
-// ======================================================
-// PAGE WRAPPER
-// ======================================================
-
-export default function LoginPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="flex min-h-screen items-center justify-center bg-[#090a10] text-white">
-          Loading...
-        </main>
-      }
-    >
-      <LoginForm />
-    </Suspense>
   );
 }

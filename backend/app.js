@@ -4,7 +4,6 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const session = require("express-session");
-const MongoStore = require("connect-mongo");
 
 // ======================================================
 // ENVIRONMENT
@@ -267,6 +266,7 @@ const sessionCookie = {
 
 // ======================================================
 // SESSION
+// NO CONNECT-MONGO
 // ======================================================
 
 app.use(
@@ -280,20 +280,6 @@ app.use(
     saveUninitialized: false,
 
     rolling: true,
-
-    store: MongoStore.create({
-      mongoUrl: MONGO_URI,
-
-      collectionName: "sessions",
-
-      ttl:
-        60 *
-        60 *
-        24 *
-        7,
-
-      autoRemove: "native",
-    }),
 
     cookie: sessionCookie,
   })
@@ -313,6 +299,7 @@ app.use(passport.session());
 
 app.use((req, res, next) => {
   console.log("Session ID:", req.sessionID);
+
   console.log(
     "Authenticated:",
     req.isAuthenticated
@@ -745,6 +732,7 @@ const server = app.listen(PORT, () => {
 const gracefulShutdown = async (signal) => {
   try {
     console.log("");
+
     console.log(
       `${signal} received. Shutting down...`
     );
